@@ -1,511 +1,571 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>Melody Recorder</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-        button {
-            padding: 1rem 2rem;
-            font-size: 1.2rem;
-            cursor: pointer;
-        }
-        #melodyList {
-            margin-top: 2rem;
-        }
-        .melody-item {
-            padding: 1rem;
-            border: 1px solid #ccc;
-            margin: 0.5rem 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        #pitchDisplay {
-            position: relative;
-            height: 100px;
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin: 1rem 0;
-            overflow: hidden;
-        }
-        #pitchMarker {
-            position: absolute;
-            width: 4px;
-            height: 100%;
-            background: red;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-        #currentPitch {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background: blue;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            transition: all 0.1s ease;
-        }
-        #pitchInfo {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.9rem;
-            color: #666;
-        }
-        .pitch-perfect {
-            background: green !important;
-        }
-        .pitch-close {
-            background: orange !important;
-        }
-        .pitch-off {
-            background: red !important;
-        }
-        #waveform {
-            width: 100%;
-            height: 60px;
-            background: #000;
-            margin-top: 1rem;
-        }
-    </style>
+	<title>Melody Recorder</title>
+	<style>
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			max-width: 800px;
+			margin: 2rem auto;
+			padding: 0 1rem;
+		}
+
+		.container {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		button {
+			padding: 1rem 2rem;
+			font-size: 1.2rem;
+			cursor: pointer;
+		}
+
+		#melodyList {
+			margin-top: 2rem;
+		}
+
+		.melody-item {
+			padding: 1rem;
+			border: 1px solid #ccc;
+			margin: 0.5rem 0;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		#pitchDisplay {
+			position: relative;
+			height: 100px;
+			background: #f5f5f5;
+			border: 1px solid #ddd;
+			border-radius: 4px;
+			margin: 1rem 0;
+			overflow: hidden;
+		}
+
+		#pitchMarker {
+			position: absolute;
+			width: 4px;
+			height: 100%;
+			background: red;
+			left: 50%;
+			transform: translateX(-50%);
+		}
+
+		#currentPitch {
+			position: absolute;
+			width: 20px;
+			height: 20px;
+			background: blue;
+			border-radius: 50%;
+			transform: translate(-50%, -50%);
+			transition: all 0.1s ease;
+		}
+
+		#pitchInfo {
+			display: flex;
+			justify-content: space-between;
+			font-size: 0.9rem;
+			color: #666;
+		}
+
+		.pitch-perfect {
+			background: green !important;
+		}
+
+		.pitch-close {
+			background: orange !important;
+		}
+
+		.pitch-off {
+			background: red !important;
+		}
+
+		#waveform {
+			width: 100%;
+			height: 60px;
+			background: #000;
+			margin-top: 1rem;
+		}
+	</style>
 </head>
+
 <body>
-    <div class="container">
-    	<h1>Melody Recorder</h1>
-    	<button id="recordButton">Press and Hold to Record</button>
-    	<div id="status">Ready to record</div>
+	<div class="container">
+		<h1>Melody Recorder</h1>
+		<button id="recordButton">Press and Hold to Record</button>
+		<div id="status">Ready to record</div>
 
-    	<div id="pitchDisplay">
-    		<div id="pitchMarker"></div>
-    		<div id="currentPitch"></div>
-    	</div>
-    	<div id="pitchInfo">
-    		<span>-50 cents</span>
-    		<span>Perfect</span>
-    		<span>+50 cents</span>
-    	</div>
+		<div id="pitchDisplay">
+			<div id="pitchMarker"></div>
+			<div id="currentPitch"></div>
+		</div>
+		<div id="pitchInfo">
+			<span>-50 cents</span>
+			<span>Perfect</span>
+			<span>+50 cents</span>
+		</div>
 
-    	<!-- New note display elements -->
-    	<div id="currentNote"></div>
-    	<div id="notesHistory"></div>
+		<!-- New note display elements -->
+		<div id="currentNote"></div>
+		<div id="notesHistory"></div>
 
-    	<canvas id="waveform"></canvas>
-    	<div id="melodyList"></div>
-    </div>
+		<canvas id="waveform"></canvas>
+		<div id="melodyList"></div>
+	</div>
 
 
-    <script>
-        class MelodyRecorder {
-            constructor() {
-                // Previous initialization
-                this.audioContext = null;
-                this.analyser = null;
-                this.mediaStream = null;
-                this.isRecording = false;
-                this.recordedNotes = [];
-                this.savedMelodies = JSON.parse(localStorage.getItem('melodies') || '[]');
+	<script>
+		class MelodyRecorder {
+			constructor() {
+				// Previous initialization
+				this.audioContext = null;
+				this.analyser = null;
+				this.mediaStream = null;
+				this.isRecording = false;
+				this.recordedNotes = [];
+				this.savedMelodies = JSON.parse(localStorage.getItem('melodies') || '[]');
 
-                this.lastNote = null;
-                this.noteBuffer = [];
-                this.noteBufferSize = 5;
-                this.centsTolerance = 50;
-                this.minNoteDuration = 100;
-                this.lastNoteTime = 0;
+				this.lastNote = null;
+				this.noteBuffer = [];
+				this.noteBufferSize = 5;
+				this.centsTolerance = 50;
+				this.minNoteDuration = 100;
+				this.lastNoteTime = 0;
 
-                // Visualization elements
-                this.pitchDisplay = document.getElementById('pitchDisplay');
-                this.currentPitch = document.getElementById('currentPitch');
-                this.waveformCanvas = document.getElementById('waveform');
-                this.waveformCtx = this.waveformCanvas.getContext('2d');
+				// Visualization elements
+				this.pitchDisplay = document.getElementById('pitchDisplay');
+				this.currentPitch = document.getElementById('currentPitch');
+				this.waveformCanvas = document.getElementById('waveform');
+				this.waveformCtx = this.waveformCanvas.getContext('2d');
 
-                // Note display elements
-                this.currentNoteDisplay = document.getElementById('currentNote');
-                this.notesHistoryDisplay = document.getElementById('notesHistory');
+				// Note display elements
+				this.currentNoteDisplay = document.getElementById('currentNote');
+				this.notesHistoryDisplay = document.getElementById('notesHistory');
 
-                this.initializeUI();
-                this.renderSavedMelodies();
-                this.setupWaveformCanvas();
-            }
+				this.initializeUI();
+				this.renderSavedMelodies();
+				this.setupWaveformCanvas();
+			}
 
-            setupWaveformCanvas() {
-                this.waveformCanvas.width = this.waveformCanvas.offsetWidth;
-                this.waveformCanvas.height = this.waveformCanvas.offsetHeight;
-            }
+			setupWaveformCanvas() {
+				this.waveformCanvas.width = this.waveformCanvas.offsetWidth;
+				this.waveformCanvas.height = this.waveformCanvas.offsetHeight;
+			}
 
-            drawWaveform(dataArray) {
-                const width = this.waveformCanvas.width;
-                const height = this.waveformCanvas.height;
-                const ctx = this.waveformCtx;
+			drawWaveform(dataArray) {
+				const width = this.waveformCanvas.width;
+				const height = this.waveformCanvas.height;
+				const ctx = this.waveformCtx;
 
-                ctx.fillStyle = 'rgb(0, 0, 0)';
-                ctx.fillRect(0, 0, width, height);
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = 'rgb(0, 255, 0)';
-                ctx.beginPath();
+				ctx.fillStyle = 'rgb(0, 0, 0)';
+				ctx.fillRect(0, 0, width, height);
+				ctx.lineWidth = 2;
+				ctx.strokeStyle = 'rgb(0, 255, 0)';
+				ctx.beginPath();
 
-                const sliceWidth = width / dataArray.length;
-                let x = 0;
+				const sliceWidth = width / dataArray.length;
+				let x = 0;
 
-                for (let i = 0; i < dataArray.length; i++) {
-                    const v = dataArray[i];
-                    const y = (v + 1) / 2 * height;
+				for (let i = 0; i < dataArray.length; i++) {
+					const v = dataArray[i];
+					const y = (v + 1) / 2 * height;
 
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
+					if (i === 0) {
+						ctx.moveTo(x, y);
+					} else {
+						ctx.lineTo(x, y);
+					}
 
-                    x += sliceWidth;
-                }
+					x += sliceWidth;
+				}
 
-                ctx.lineTo(width, height / 2);
-                ctx.stroke();
-            }
+				ctx.lineTo(width, height / 2);
+				ctx.stroke();
+			}
 
-            updatePitchVisual(cents) {
-                if (cents === null) {
-                    this.currentPitch.style.display = 'none';
-                    return;
-                }
+			updatePitchVisual(cents) {
+				if (cents === null) {
+					this.currentPitch.style.display = 'none';
+					return;
+				}
 
-                this.currentPitch.style.display = 'block';
-                const position = ((cents + this.centsTolerance) / (this.centsTolerance * 2)) * 100;
-                this.currentPitch.style.left = `${position}%`;
-                this.currentPitch.style.top = '50%';
+				this.currentPitch.style.display = 'block';
+				const position = ((cents + this.centsTolerance) / (this.centsTolerance * 2)) * 100;
+				this.currentPitch.style.left = `${position}%`;
+				this.currentPitch.style.top = '50%';
 
-                // Update color based on how close to perfect pitch
-                if (Math.abs(cents) < 5) {
-                    this.currentPitch.className = 'pitch-perfect';
-                } else if (Math.abs(cents) < 25) {
-                    this.currentPitch.className = 'pitch-close';
-                } else {
-                    this.currentPitch.className = 'pitch-off';
-                }
-            }
+				// Update color based on how close to perfect pitch
+				if (Math.abs(cents) < 5) {
+					this.currentPitch.className = 'pitch-perfect';
+				} else if (Math.abs(cents) < 25) {
+					this.currentPitch.className = 'pitch-close';
+				} else {
+					this.currentPitch.className = 'pitch-off';
+				}
+			}
 
-            async initializeAudioContext() {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                this.analyser = this.audioContext.createAnalyser();
-                this.analyser.fftSize = 2048;
+			async initializeAudioContext() {
+				this.audioContext = new(window.AudioContext || window.webkitAudioContext)();
+				this.analyser = this.audioContext.createAnalyser();
+				this.analyser.fftSize = 2048;
 
-                try {
-                    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-                    source.connect(this.analyser);
-                } catch (err) {
-                    console.error('Error accessing microphone:', err);
-                    document.getElementById('status').textContent = 'Error: Microphone access denied';
-                }
-            }
+				try {
+					this.mediaStream = await navigator.mediaDevices.getUserMedia({
+						audio: true
+					});
+					const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+					source.connect(this.analyser);
+				} catch (err) {
+					console.error('Error accessing microphone:', err);
+					document.getElementById('status').textContent = 'Error: Microphone access denied';
+				}
+			}
 
-            initializeUI() {
-                const recordButton = document.getElementById('recordButton');
-                
-                recordButton.addEventListener('mousedown', () => this.startRecording());
-                recordButton.addEventListener('mouseup', () => this.stopRecording());
-                recordButton.addEventListener('mouseleave', () => this.stopRecording());
-            }
+			initializeUI() {
+				const recordButton = document.getElementById('recordButton');
 
-            async startRecording() {
-                if (!this.audioContext) {
-                    await this.initializeAudioContext();
-                }
-                
-                this.isRecording = true;
-                this.recordedNotes = [];
-                this.lastNote = null;
-                this.noteBuffer = [];
-                this.lastNoteTime = 0;
-                document.getElementById('status').textContent = 'Recording...';
-                this.detectPitch();
-            }
+				recordButton.addEventListener('mousedown', () => this.startRecording());
+				recordButton.addEventListener('mouseup', () => this.stopRecording());
+				recordButton.addEventListener('mouseleave', () => this.stopRecording());
+			}
 
-            stopRecording() {
-                if (!this.isRecording) return;
-                
-                this.isRecording = false;
-                document.getElementById('status').textContent = 'Recording stopped';
-                this.updatePitchVisual(null);
-                
-                if (this.recordedNotes.length > 0) {
-                    this.saveMelody(this.recordedNotes);
-                }
-            }
+			async startRecording() {
+				if (!this.audioContext) {
+					await this.initializeAudioContext();
+				}
 
-            detectPitch() {
-                if (!this.isRecording) return;
+				this.isRecording = true;
+				this.recordedNotes = [];
+				this.lastNote = null;
+				this.noteBuffer = [];
+				this.lastNoteTime = 0;
+				document.getElementById('status').textContent = 'Recording...';
+				this.detectPitch();
+			}
 
-                const bufferLength = this.analyser.frequencyBinCount;
-                const dataArray = new Float32Array(bufferLength);
-                this.analyser.getFloatTimeDomainData(dataArray);
+			stopRecording() {
+				if (!this.isRecording) return;
 
-                // Update waveform visualization
-                this.drawWaveform(dataArray);
+				this.isRecording = false;
+				document.getElementById('status').textContent = 'Recording stopped';
+				this.updatePitchVisual(null);
 
-                const frequency = this.autoCorrelate(dataArray, this.audioContext.sampleRate);
-                
-                if (frequency !== -1) {
-                    const { note, cents } = this.processNote(frequency);
-                    if (note) {
-                        document.getElementById('notes').textContent = this.recordedNotes.join(' ');
-                    }
-                    // Update pitch visualization even if note hasn't changed
-                    this.updatePitchVisual(cents);
-                } else {
-                    this.updatePitchVisual(null);
-                }
+				if (this.recordedNotes.length > 0) {
+					this.saveMelody(this.recordedNotes);
+				}
+			}
 
-                requestAnimationFrame(() => this.detectPitch());
-            }
+			detectPitch() {
+				if (!this.isRecording) return;
 
-            processNote(frequency) {
-                const currentTime = Date.now();
-                const { note, cents } = this.frequencyToNote(frequency);
-                
-                if (!note) return { note: null, cents: null };
+				const bufferLength = this.analyser.frequencyBinCount;
+				const dataArray = new Float32Array(bufferLength);
+				this.analyser.getFloatTimeDomainData(dataArray);
 
-                this.noteBuffer.push(note);
-                if (this.noteBuffer.length > this.noteBufferSize) {
-                    this.noteBuffer.shift();
-                }
+				// Update waveform visualization
+				this.drawWaveform(dataArray);
 
-                if (this.noteBuffer.length === this.noteBufferSize) {
-                    const noteCounts = {};
-                    let maxCount = 0;
-                    let dominantNote = null;
+				const frequency = this.autoCorrelate(dataArray, this.audioContext.sampleRate);
 
-                    this.noteBuffer.forEach(n => {
-                        noteCounts[n] = (noteCounts[n] || 0) + 1;
-                        if (noteCounts[n] > maxCount) {
-                            maxCount = noteCounts[n];
-                            dominantNote = n;
-                        }
-                    });
+				if (frequency !== -1) {
+					const {
+						note,
+						cents
+					} = this.processNote(frequency);
 
-                    if (dominantNote !== this.lastNote && 
-                        currentTime - this.lastNoteTime >= this.minNoteDuration && 
-                        maxCount >= this.noteBufferSize * 0.6) {
-                        
-                        this.lastNote = dominantNote;
-                        this.lastNoteTime = currentTime;
-                        
-                        if (!this.recordedNotes.length || 
-                            this.recordedNotes[this.recordedNotes.length - 1] !== dominantNote) {
-                            this.recordedNotes.push(dominantNote);
-                            return { note: dominantNote, cents };
-                        }
-                    }
-                }
+					// The current note is updated within processNote and updateNotesHistory
+					this.updatePitchVisual(cents);
+				} else {
+					this.updatePitchVisual(null);
+				}
 
-                return { note: null, cents };
-            }
+				requestAnimationFrame(() => this.detectPitch());
+			}
 
-            autoCorrelate(buffer, sampleRate) {
-                let SIZE = buffer.length;
-                let sumOfSquares = 0;
-                for (let i = 0; i < SIZE; i++) {
-                    let val = buffer[i];
-                    sumOfSquares += val * val;
-                }
-                let rootMeanSquare = Math.sqrt(sumOfSquares / SIZE);
-                if (rootMeanSquare < 0.01) return -1;
+			processNote(frequency) {
+				const currentTime = Date.now();
+				const {
+					note,
+					cents
+				} = this.frequencyToNote(frequency);
 
-                let r1 = 0, r2 = SIZE - 1;
-                for (let i = 0; i < SIZE/2; i++) {
-                    let sum = 0;
-                    for (let j = 0; j < SIZE - i; j++) {
-                        sum += buffer[j] * buffer[j+i];
-                    }
-                    if (i === 0) r1 = sum;
-                    else if (sum > r2) r2 = sum;
-                }
-                let threshold = 0.2;
-                if (r1 < threshold) return -1;
-                
-                let foundPitch = false;
-                let maxCorrelation = -1;
-                let maxOffset = -1;
-                
-                for (let offset = 0; offset < SIZE/2; offset++) {
-                    let correlation = 0;
-                    for (let i = 0; i < SIZE - offset; i++) {
-                        correlation += buffer[i] * buffer[i + offset];
-                    }
-                    if (correlation > maxCorrelation) {
-                        maxCorrelation = correlation;
-                        maxOffset = offset;
-                        foundPitch = true;
-                    }
-                }
+				if (!note) {
+					this.currentNoteDisplay.textContent = '–';
+					return {
+						note: null,
+						cents
+					};
+				}
 
-                if (foundPitch) {
-                    return sampleRate / maxOffset;
-                }
-                return -1;
-            }
+				// Always show current detected note
+				this.currentNoteDisplay.textContent = note;
 
-            frequencyToNote(frequency) {
-                const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-                const a4 = 440;
-                const a4Index = 69;
-                
-                if (frequency === 0) return { note: null, cents: null };
-                
-                const midiNoteFloat = 12 * Math.log2(frequency / a4) + a4Index;
-                const cents = Math.round((midiNoteFloat % 1) * 100);
-                const normalizedCents = cents > 50 ? cents - 100 : cents;
-                
-                if (Math.abs(normalizedCents) <= this.centsTolerance) {
-                    const midiNote = Math.round(midiNoteFloat);
-                    const octave = Math.floor(midiNote / 12) - 1;
-                    const noteName = noteNames[midiNote % 12];
-                    return { 
-                        note: `${noteName}${octave}`,
-                        cents: normalizedCents
-                    };
-                }
-                
-                return { note: null, cents: normalizedCents };
-            }
+				this.noteBuffer.push(note);
+				if (this.noteBuffer.length > this.noteBufferSize) {
+					this.noteBuffer.shift();
+				}
 
-            saveMelody(notes) {
-                const melody = {
-                    id: Date.now(),
-                    notes: notes,
-                    timestamp: new Date().toISOString()
-                };
-                
-                this.savedMelodies.push(melody);
-                localStorage.setItem('melodies', JSON.stringify(this.savedMelodies));
-                this.renderSavedMelodies();
-            }
+				if (this.noteBuffer.length === this.noteBufferSize) {
+					const noteCounts = {};
+					let maxCount = 0;
+					let dominantNote = null;
 
-            renderSavedMelodies() {
-                const melodyList = document.getElementById('melodyList');
-                melodyList.innerHTML = '<h2>Saved Melodies</h2>';
-                
-                this.savedMelodies.forEach(melody => {
-                    const div = document.createElement('div');
-                    div.className = 'melody-item';
-                    div.innerHTML = `
+					this.noteBuffer.forEach(n => {
+						noteCounts[n] = (noteCounts[n] || 0) + 1;
+						if (noteCounts[n] > maxCount) {
+							maxCount = noteCounts[n];
+							dominantNote = n;
+						}
+					});
+
+					if (dominantNote !== this.lastNote &&
+						currentTime - this.lastNoteTime >= this.minNoteDuration &&
+						maxCount >= this.noteBufferSize * 0.6) {
+
+						this.lastNote = dominantNote;
+						this.lastNoteTime = currentTime;
+
+						if (!this.recordedNotes.length ||
+							this.recordedNotes[this.recordedNotes.length - 1] !== dominantNote) {
+							this.recordedNotes.push(dominantNote);
+							this.updateNotesHistory();
+							return {
+								note: dominantNote,
+								cents
+							};
+						}
+					}
+				}
+
+				return {
+					note: null,
+					cents
+				};
+			}
+
+			autoCorrelate(buffer, sampleRate) {
+				const SIZE = buffer.length;
+				let sumOfSquares = 0;
+				for (let i = 0; i < SIZE; i++) {
+					sumOfSquares += buffer[i] * buffer[i];
+				}
+				let rms = Math.sqrt(sumOfSquares / SIZE);
+				if (rms < 0.01) return -1; // too quiet
+
+				// Trim the buffer to ignore any silent edges
+				let r1 = 0;
+				for (let i = 0; i < SIZE / 2; i++) {
+					if (Math.abs(buffer[i]) > 0.2) {
+						r1 = i;
+						break;
+					}
+				}
+				let r2 = SIZE - 1;
+				for (let i = SIZE - 1; i >= SIZE / 2; i--) {
+					if (Math.abs(buffer[i]) > 0.2) {
+						r2 = i;
+						break;
+					}
+				}
+
+				let maxCorrelation = -1;
+				let bestOffset = -1;
+
+				// Compute correlation for offsets within the trimmed region
+				for (let offset = r1; offset <= r2; offset++) {
+					let correlation = 0;
+					// Sum the product of the signal with a shifted version of itself
+					for (let i = 0; i < r2 - offset; i++) {
+						correlation += buffer[i] * buffer[i + offset];
+					}
+					if (correlation > maxCorrelation) {
+						maxCorrelation = correlation;
+						bestOffset = offset;
+					}
+				}
+
+				if (maxCorrelation > 0 && bestOffset !== -1) {
+					return sampleRate / bestOffset;
+				}
+				return -1;
+			}
+
+			frequencyToNote(frequency) {
+				const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+				const a4 = 440;
+				const a4Index = 69;
+
+				if (frequency === 0) return {
+					note: null,
+					cents: null
+				};
+
+				const midiNoteFloat = 12 * Math.log2(frequency / a4) + a4Index;
+				const cents = Math.round((midiNoteFloat % 1) * 100);
+				const normalizedCents = cents > 50 ? cents - 100 : cents;
+
+				if (Math.abs(normalizedCents) <= this.centsTolerance) {
+					const midiNote = Math.round(midiNoteFloat);
+					const octave = Math.floor(midiNote / 12) - 1;
+					const noteName = noteNames[midiNote % 12];
+					return {
+						note: `${noteName}${octave}`,
+						cents: normalizedCents
+					};
+				}
+
+				return {
+					note: null,
+					cents: normalizedCents
+				};
+			}
+
+			saveMelody(notes) {
+				const melody = {
+					id: Date.now(),
+					notes: notes,
+					timestamp: new Date().toISOString()
+				};
+
+				this.savedMelodies.push(melody);
+				localStorage.setItem('melodies', JSON.stringify(this.savedMelodies));
+				this.renderSavedMelodies();
+			}
+
+			renderSavedMelodies() {
+				const melodyList = document.getElementById('melodyList');
+				melodyList.innerHTML = '<h2>Saved Melodies</h2>';
+
+				this.savedMelodies.forEach(melody => {
+					const div = document.createElement('div');
+					div.className = 'melody-item';
+					div.innerHTML = `
                         <span>${melody.notes.join(' ')}</span>
                         <button onclick="melodyRecorder.downloadMelody(${melody.id})">Download</button>
                     `;
-                    melodyList.appendChild(div);
-                });
-            }
+					melodyList.appendChild(div);
+				});
+			}
 
-            downloadMelody(id) {
-                const melody = this.savedMelodies.find(m => m.id === id);
-                if (!melody) return;
+			downloadMelody(id) {
+				const melody = this.savedMelodies.find(m => m.id === id);
+				if (!melody) return;
 
-                const content = `Melody recorded at ${melody.timestamp}\nNotes: ${melody.notes.join(' ')}`;
-                const blob = new Blob([content], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `melody-${id}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-processNote(frequency) {
-const currentTime = Date.now();
-const { note, cents } = this.frequencyToNote(frequency);
+				const content = `Melody recorded at ${melody.timestamp}\nNotes: ${melody.notes.join(' ')}`;
+				const blob = new Blob([content], {
+					type: 'text/plain'
+				});
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `melody-${id}.txt`;
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}
+			processNote(frequency) {
+				const currentTime = Date.now();
+				const {
+					note,
+					cents
+				} = this.frequencyToNote(frequency);
 
-if (!note) {
-this.currentNoteDisplay.textContent = '–';
-return { note: null, cents };
-}
+				if (!note) {
+					this.currentNoteDisplay.textContent = '–';
+					return {
+						note: null,
+						cents
+					};
+				}
 
-// Always show current detected note
-this.currentNoteDisplay.textContent = note;
+				// Always show current detected note
+				this.currentNoteDisplay.textContent = note;
 
-this.noteBuffer.push(note);
-if (this.noteBuffer.length > this.noteBufferSize) {
-this.noteBuffer.shift();
-}
+				this.noteBuffer.push(note);
+				if (this.noteBuffer.length > this.noteBufferSize) {
+					this.noteBuffer.shift();
+				}
 
-if (this.noteBuffer.length === this.noteBufferSize) {
-const noteCounts = {};
-let maxCount = 0;
-let dominantNote = null;
+				if (this.noteBuffer.length === this.noteBufferSize) {
+					const noteCounts = {};
+					let maxCount = 0;
+					let dominantNote = null;
 
-this.noteBuffer.forEach(n => {
-noteCounts[n] = (noteCounts[n] || 0) + 1;
-if (noteCounts[n] > maxCount) {
-maxCount = noteCounts[n];
-dominantNote = n;
-}
-});
+					this.noteBuffer.forEach(n => {
+						noteCounts[n] = (noteCounts[n] || 0) + 1;
+						if (noteCounts[n] > maxCount) {
+							maxCount = noteCounts[n];
+							dominantNote = n;
+						}
+					});
 
-if (dominantNote !== this.lastNote &&
-currentTime - this.lastNoteTime >= this.minNoteDuration &&
-maxCount >= this.noteBufferSize * 0.6) {
+					if (dominantNote !== this.lastNote &&
+						currentTime - this.lastNoteTime >= this.minNoteDuration &&
+						maxCount >= this.noteBufferSize * 0.6) {
 
-this.lastNote = dominantNote;
-this.lastNoteTime = currentTime;
+						this.lastNote = dominantNote;
+						this.lastNoteTime = currentTime;
 
-if (!this.recordedNotes.length ||
-this.recordedNotes[this.recordedNotes.length - 1] !== dominantNote) {
-this.recordedNotes.push(dominantNote);
-this.updateNotesHistory();
-return { note: dominantNote, cents };
-}
-}
-}
+						if (!this.recordedNotes.length ||
+							this.recordedNotes[this.recordedNotes.length - 1] !== dominantNote) {
+							this.recordedNotes.push(dominantNote);
+							this.updateNotesHistory();
+							return {
+								note: dominantNote,
+								cents
+							};
+						}
+					}
+				}
 
-return { note: null, cents };
-}
+				return {
+					note: null,
+					cents
+				};
+			}
 
-// New method for updating notes history display
-updateNotesHistory() {
-this.notesHistoryDisplay.textContent = this.recordedNotes.join(' ');
-}
+			// New method for updating notes history display
+			updateNotesHistory() {
+				this.notesHistoryDisplay.textContent = this.recordedNotes.join(' ');
+			}
 
-startRecording() {
-if (!this.audioContext) {
-this.initializeAudioContext();
-}
+			startRecording() {
+				if (!this.audioContext) {
+					this.initializeAudioContext();
+				}
 
-this.isRecording = true;
-this.recordedNotes = [];
-this.lastNote = null;
-this.noteBuffer = [];
-this.lastNoteTime = 0;
-this.currentNoteDisplay.textContent = '–';
-this.notesHistoryDisplay.textContent = '';
-document.getElementById('status').textContent = 'Recording...';
-this.detectPitch();
-}
+				this.isRecording = true;
+				this.recordedNotes = [];
+				this.lastNote = null;
+				this.noteBuffer = [];
+				this.lastNoteTime = 0;
+				this.currentNoteDisplay.textContent = '–';
+				this.notesHistoryDisplay.textContent = '';
+				document.getElementById('status').textContent = 'Recording...';
+				this.detectPitch();
+			}
 
-stopRecording() {
-if (!this.isRecording) return;
+			stopRecording() {
+				if (!this.isRecording) return;
 
-this.isRecording = false;
-document.getElementById('status').textContent = 'Recording stopped';
-this.updatePitchVisual(null);
-this.currentNoteDisplay.textContent = '–';
+				this.isRecording = false;
+				document.getElementById('status').textContent = 'Recording stopped';
+				this.updatePitchVisual(null);
+				this.currentNoteDisplay.textContent = '–';
 
-if (this.recordedNotes.length > 0) {
-this.saveMelody(this.recordedNotes);
-}
-}
-        }
+				if (this.recordedNotes.length > 0) {
+					this.saveMelody(this.recordedNotes);
+				}
+			}
+		}
 
-        const melodyRecorder = new MelodyRecorder();
-    </script>
+		const melodyRecorder = new MelodyRecorder();
+	</script>
 </body>
+
 </html>
