@@ -4,6 +4,9 @@ let audioContext, analyser, mediaStreamSource;
 let tolerance = TOLERANCE_DEFAULT;
 let BPM = 120; // Default BPM
 
+// Add this at the very top (after any global constants)
+let quantizationSetting = 16; // configurable: 4 = quarter, 8 = eighth, 16 = 16th note
+
 // Melody tracking variables
 let melody = [];
 let lastDetectedNote = null;
@@ -172,10 +175,46 @@ function processAudio() {
     }
 }
 
-// New function to update the active notes block
+// New global variable for currently active events.
+let currentActiveEvents = [];
+
+// Updated buildGridView: use floor for quantized start and ceil for quantized end.
+function buildGridView(events, bpm) {
+    const gridContainer = document.createElement('div');
+    gridContainer.className = "grid-container";
+    const baseWidth = 40; // pixels per quarter beat
+    const quarterBeatDuration = 60 / bpm;
+    const quantStep = quarterBeatDuration * (4 / quantizationSetting);
+    let currentTime = 0;
+    events.forEach(event => {
+        let eventStart = currentTime;
+        let eventEnd = currentTime + event.duration;
+        let qStart = Math.floor(eventStart / quantStep) * quantStep;
+        let qEnd = Math.ceil(eventEnd / quantStep) * quantStep;
+        const effectiveDuration = qEnd - qStart;
+        const boxWidth = (effectiveDuration / quarterBeatDuration) * baseWidth;
+        let box = document.createElement('div');
+        box.className = "note-box";
+        if (event.note === "Pause") {
+            box.classList.add("pause");
+        }
+        box.style.width = `${boxWidth}px`;
+        box.textContent = `${event.note} (${effectiveDuration.toFixed(2)}s)`;
+        gridContainer.appendChild(box);
+        currentTime = eventEnd;
+    });
+    return gridContainer;
+}
+
+// Modified updateActiveNotes: update currentActiveEvents and refresh grid.
 function updateActiveNotes(note) {
-    activeNotes.push(note);
-    activeNotesEl.textContent = "Active Notes: " + activeNotes.join(" ");
+    const now = performance.now();
+    const duration = (now - lastNoteStartTime) / 1000;
+    // Push a new event; in a real app you might update the last event continuously.
+    currentActiveEvents.push({ note, duration });
+    // Refresh display using abstracted grid view.
+    activeNotesEl.innerHTML = "";
+    activeNotesEl.appendChild(buildGridView(currentActiveEvents, BPM));
 }
 
 // New function to update the deviation bar visualization
@@ -251,6 +290,15 @@ function getTotalDuration(melody) {
     return melody.reduce((sum, n) => sum + n.duration, 0);
 }
 
+// New global variable for quantization setting (default: 16th note)
+// let quantizationSetting = 16; // configurable: e.g., 4 = quarter, 8 = eighth, 16 = 16th note
+
+// Modified function: quantizes a value using the step based on BPM and quantizationSetting.
+function quantizeTime(value) {
+    const quantStep = (60 / BPM) * (4 / quantizationSetting);
+    return Math.round(value / quantStep) * quantStep;
+}
+
 function saveMelody(melodyData) {
     let stored = JSON.parse(localStorage.getItem('melodies')) || [];
     // Create an object that contains BPM, total melody duration and the notes array
@@ -290,24 +338,21 @@ function noteDurationLabel(duration) {
     return closest.name;
 }
 
+// Modified updateMelodyList to display grid view using buildGridView.
 function updateMelodyList() {
     let stored = JSON.parse(localStorage.getItem('melodies')) || [];
-    // Display newest first
+    // Display newest first.
     stored = stored.reverse();
     melodyListEl.innerHTML = "";
     stored.forEach((mel, index) => {
         let li = document.createElement('li');
-        let textSpan = document.createElement('span');
-        // Ensure totalDuration exists
-        const totalDuration = (mel.totalDuration !== undefined)
-            ? mel.totalDuration
-            : getTotalDuration(mel.notes);
-        // Use noteDurationLabel to display musical time notation.
-        // Display BPM and total melody duration.
-        textSpan.textContent = `Melody ${index + 1} | BPM: ${mel.bpm} | Total Duration: ${totalDuration.toFixed(2)}s : ` +
-            mel.notes.map(n => `${n.note} (${noteDurationLabel(n.duration)})`).join(" - ");
-        li.appendChild(textSpan);
-        // Create download button for this melody
+        // Header for melody info.
+        let header = document.createElement('div');
+        header.textContent = `Melody ${index + 1} | BPM: ${mel.bpm} | Total Duration: ${mel.totalDuration.toFixed(2)}s`;
+        li.appendChild(header);
+        // Build grid view for recorded events.
+        li.appendChild(buildGridView(mel.notes, mel.bpm));
+        // Download button.
         let downloadBtn = document.createElement('button');
         downloadBtn.textContent = "Download";
         downloadBtn.style.marginLeft = "10px";
