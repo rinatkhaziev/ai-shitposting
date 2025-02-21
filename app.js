@@ -9,9 +9,9 @@ let melody = [];
 let lastDetectedNote = null;
 let lastNoteStartTime = null;
 
-// UI Elements
+// UI Elements: updated to match new current note box structure
 const recordButton = document.getElementById('recordButton');
-const currentNoteEl = document.querySelector('#currentNote span');
+const currentNoteEl = document.getElementById('noteDisplay');
 const deviationMarkerEl = document.getElementById('deviationMarker');
 const melodyListEl = document.querySelector('#melodyList ul');
 
@@ -33,11 +33,11 @@ function processAudio() {
 	let pitch = autoCorrelate(buffer, audioContext.sampleRate);
 	if(pitch !== -1) {
 		let noteInfo = frequencyToNoteInfo(pitch);
-		// Update UI
+		// Update note display: updated to use new container element
 		currentNoteEl.textContent = noteInfo.note;
-		// Display deviation marker: centered if within tolerance, else show deviation value
-		deviationMarkerEl.textContent = Math.abs(noteInfo.deviation) <= tolerance ? "•" : noteInfo.deviation.toFixed(1) + "¢";
-
+		// Updated: call new function to update deviation bar visualization
+		updateDeviationBar(noteInfo.deviation);
+		
 		// Record melody when note changes
 		if(lastDetectedNote !== noteInfo.note) {
 			let now = performance.now();
@@ -50,11 +50,46 @@ function processAudio() {
 		}
 	} else {
 		currentNoteEl.textContent = "No pitch detected";
-		deviationMarkerEl.textContent = "";
+		deviationMarkerEl.innerHTML = ""; // Clear deviation display if no pitch
 	}
 	if(recording) {
 		requestAnimationFrame(processAudio);
 	}
+}
+
+// New function to update the deviation bar visualization
+function updateDeviationBar(deviation) {
+	// Configure the container (if not already styled via CSS)
+	deviationMarkerEl.style.position = 'relative';
+	// deviationMarkerEl.style.width = '200px';
+	// deviationMarkerEl.style.height = '20px';
+	deviationMarkerEl.style.background = '#eee';
+	deviationMarkerEl.innerHTML = ''; // Clear previous content
+
+	// Add a center line which represents a perfect pitch match
+	const centerLine = document.createElement('div');
+	centerLine.style.position = 'absolute';
+	centerLine.style.top = '0';
+	centerLine.style.left = '50%';
+	centerLine.style.width = '2px';
+	centerLine.style.height = '100%';
+	centerLine.style.background = '#aaa';
+	deviationMarkerEl.appendChild(centerLine);
+
+	// Create a marker for the detected deviation
+	const marker = document.createElement('div');
+	marker.style.position = 'absolute';
+	marker.style.top = '0';
+	marker.style.width = '4px';
+	marker.style.height = '100%';
+	marker.style.background = 'red';
+	
+	// Maximum displacement in pixels for deviation at tolerance threshold
+	const maxDisplacement = 50; 
+	// Calculate displacement proportional to deviation (clamped to [-tolerance, +tolerance])
+	let displacement = (Math.max(Math.min(deviation, tolerance), -tolerance) / tolerance) * maxDisplacement;
+	marker.style.left = `calc(50% + ${displacement}px)`;
+	deviationMarkerEl.appendChild(marker);
 }
 
 recordButton.addEventListener('click', () => {

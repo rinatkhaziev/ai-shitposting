@@ -7,7 +7,11 @@
 </head>
 <body>
 	<button id="recordButton">Start Recording</button>
-	<div id="currentNote">Current Note: <span></span> <span id="deviationMarker"></span></div>
+	<!-- New current note display container -->
+	<div id="currentNoteBox">
+		<div id="noteDisplay">No pitch detected</div>
+		<div id="deviationDisplay"><span id="deviationMarker"></span></div>
+	</div>
 	<div id="waveformDisplay">Waveform: <!-- canvas or svg can be placed here in future --></div>
 	<div id="melodyList">Recorded Melody: <ul></ul></div>
 	<script src="app.js"></script>
