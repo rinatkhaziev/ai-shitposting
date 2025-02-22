@@ -24,18 +24,7 @@ let waveformCanvas, waveformCtx;
 
 // New global variable and UI element for active notes display
 let activeNotes = [];
-const activeNotesEl = document.getElementById('activeNotes') || (() => {
-    const el = document.createElement('div');
-    el.id = 'activeNotes';
-    el.style.marginTop = "20px";
-    el.style.padding = "10px";
-    el.style.background = "#fff";
-    el.style.borderRadius = "4px";
-    el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
-    el.textContent = "Active Notes: ";
-    document.body.appendChild(el);
-    return el;
-})();
+const activeNotesEl = document.getElementById('activeNotes');
 
 // New global variables for debouncing note detection
 let candidateNote = null;
@@ -59,10 +48,8 @@ function initWaveform() {
     waveformCanvas = document.createElement('canvas');
     waveformCanvas.width = waveformDisplay.clientWidth - 20; // internal pixel resolution
     waveformCanvas.height = 100; // fixed height for waveform display
-    // Set CSS to scale it within the container without overflow
-    waveformCanvas.style.display = "block";
-    waveformCanvas.style.width = "100%";
-    waveformCanvas.style.boxSizing = "border-box";
+    // Removed inline styles; add CSS class instead:
+    waveformCanvas.classList.add("waveform-canvas");
     
     waveformDisplay.innerHTML = ""; // clear placeholder text
     waveformDisplay.appendChild(waveformCanvas);
@@ -178,6 +165,9 @@ function processAudio() {
 // New global variable for currently active events.
 let currentActiveEvents = [];
 
+// New global variable for tracking the start time of the current active note.
+let activeNoteStartTime = null;
+
 // Updated buildGridView: use floor for quantized start and ceil for quantized end.
 function buildGridView(events, bpm) {
     const gridContainer = document.createElement('div');
@@ -209,47 +199,36 @@ function buildGridView(events, bpm) {
 // Modified updateActiveNotes: update currentActiveEvents and refresh grid.
 function updateActiveNotes(note) {
     const now = performance.now();
-    const duration = (now - lastNoteStartTime) / 1000;
-    // Push a new event; in a real app you might update the last event continuously.
-    currentActiveEvents.push({ note, duration });
-    // Refresh display using abstracted grid view.
+    if (currentActiveEvents.length > 0 && currentActiveEvents[currentActiveEvents.length - 1].note === note) {
+        // Update duration of the currently active note.
+        currentActiveEvents[currentActiveEvents.length - 1].duration = (now - activeNoteStartTime) / 1000;
+    } else {
+        // Start a new note event.
+        activeNoteStartTime = now;
+        currentActiveEvents.push({ note, duration: 0 });
+    }
     activeNotesEl.innerHTML = "";
     activeNotesEl.appendChild(buildGridView(currentActiveEvents, BPM));
 }
 
 // New function to update the deviation bar visualization
 function updateDeviationBar(deviation) {
-	// Configure the container (if not already styled via CSS)
-	deviationMarkerEl.style.position = 'relative';
-	// deviationMarkerEl.style.width = '200px';
-	// deviationMarkerEl.style.height = '20px';
-	deviationMarkerEl.style.background = '#eee';
-	deviationMarkerEl.innerHTML = ''; // Clear previous content
+    // Clear container and add CSS class
+    deviationMarkerEl.innerHTML = "";
+    deviationMarkerEl.classList.add("deviation-container");
 
-	// Add a center line which represents a perfect pitch match
-	const centerLine = document.createElement('div');
-	centerLine.style.position = 'absolute';
-	centerLine.style.top = '0';
-	centerLine.style.left = '50%';
-	centerLine.style.width = '2px';
-	centerLine.style.height = '100%';
-	centerLine.style.background = '#aaa';
-	deviationMarkerEl.appendChild(centerLine);
+    // Create center line element with CSS class
+    const centerLine = document.createElement('div');
+    centerLine.classList.add("center-line");
+    deviationMarkerEl.appendChild(centerLine);
 
-	// Create a marker for the detected deviation
-	const marker = document.createElement('div');
-	marker.style.position = 'absolute';
-	marker.style.top = '0';
-	marker.style.width = '4px';
-	marker.style.height = '100%';
-	marker.style.background = 'red';
-	
-	// Maximum displacement in pixels for deviation at tolerance threshold
-	const maxDisplacement = 50; 
-	// Calculate displacement proportional to deviation (clamped to [-tolerance, +tolerance])
-	let displacement = (Math.max(Math.min(deviation, tolerance), -tolerance) / tolerance) * maxDisplacement;
-	marker.style.left = `calc(50% + ${displacement}px)`;
-	deviationMarkerEl.appendChild(marker);
+    // Create deviation marker element with CSS class, but update left dynamically
+    const marker = document.createElement('div');
+    marker.classList.add("deviation-marker");
+    const maxDisplacement = 50;
+    let displacement = (Math.max(Math.min(deviation, tolerance), -tolerance) / tolerance) * maxDisplacement;
+    marker.style.left = `calc(50% + ${displacement}px)`;
+    deviationMarkerEl.appendChild(marker);
 }
 
 recordButton.addEventListener('click', () => {
