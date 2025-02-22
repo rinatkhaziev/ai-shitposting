@@ -1,22 +1,60 @@
+/* --- Updated modern styling --- */
 body {
-	font-family: Arial, sans-serif;
-	background: #f7f7f7;
-	margin: 0;
-	padding: 20px;
-	color: #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+    font-family: 'Roboto', sans-serif;
+    color: #333;
 }
+
+/* Container with card-like appearance */
+#wrapper {
+    max-width: 600px;
+    width: 100%;
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+/* Header styling for the app title */
+header {
+    width: 100%;
+    text-align: center;
+    padding: 10px 0;
+    margin-bottom: 20px;
+}
+header h1 {
+    margin: 0;
+    font-size: 2em;
+}
+
+/* Modern button styling */
 #recordButton {
-	background: #4CAF50;
-	color: white;
-	border: none;
-	padding: 10px 20px;
-	cursor: pointer;
-	border-radius: 4px;
-	transition: background 0.3s;
+    background: #4CAF50;
+    color: #fff;
+    border: none;
+    padding: 12px 24px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.3s, transform 0.2s;
 }
 #recordButton:hover {
-	background: #45a049;
+    background: #45a049;
+    transform: scale(1.02);
 }
+
+/* Input styling */
+#bpmControl input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
 #currentNote, #waveformDisplay, #melodyList {
 	margin-top: 20px;
 	padding: 10px;
@@ -66,10 +104,6 @@ body {
 	display: block;
 }
 
-#wrapper {
-	max-width: 400px;
-}
-
 /* New styles for the grid display */
 .grid-container {
     display: flex;
@@ -87,6 +121,7 @@ body {
         #eee 40px,
         #eee 40.1px
     );
+    overflow: scroll;
 }
 
 .note-box {
@@ -106,4 +141,12 @@ body {
 
 .note-box.pause {
     background-color: #999;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 20px;
 }

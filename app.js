@@ -299,13 +299,27 @@ function quantizeTime(value) {
     return Math.round(value / quantStep) * quantStep;
 }
 
+// New helper function to trim leading and trailing pauses from the melody
+function trimMelody(melodyArray) {
+    let trimmed = melodyArray.slice();
+    while(trimmed.length && trimmed[0].note === "Pause") {
+        trimmed.shift();
+    }
+    while(trimmed.length && trimmed[trimmed.length - 1].note === "Pause") {
+        trimmed.pop();
+    }
+    return trimmed;
+}
+
+// Modified saveMelody to trim pauses before saving and adjust total duration accordingly
 function saveMelody(melodyData) {
+    const trimmedMelody = trimMelody(melodyData);
     let stored = JSON.parse(localStorage.getItem('melodies')) || [];
-    // Create an object that contains BPM, total melody duration and the notes array
     const melodyObj = {
         bpm: BPM,
-        totalDuration: getTotalDuration(melodyData),
-        notes: melodyData
+        totalDuration: getTotalDuration(trimmedMelody),
+        notes: trimmedMelody,
+        savedAt: new Date().toISOString() // timestamp for when melody is saved
     };
     stored.push(melodyObj);
     localStorage.setItem('melodies', JSON.stringify(stored));
@@ -338,21 +352,18 @@ function noteDurationLabel(duration) {
     return closest.name;
 }
 
-// Modified updateMelodyList to display grid view using buildGridView.
+// Updated updateMelodyList to display melodies in reverse chronological order along with formatted timestamps
 function updateMelodyList() {
     let stored = JSON.parse(localStorage.getItem('melodies')) || [];
-    // Display newest first.
-    stored = stored.reverse();
+    stored.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt)); // reverse chronological order
     melodyListEl.innerHTML = "";
     stored.forEach((mel, index) => {
         let li = document.createElement('li');
-        // Header for melody info.
         let header = document.createElement('div');
-        header.textContent = `Melody ${index + 1} | BPM: ${mel.bpm} | Total Duration: ${mel.totalDuration.toFixed(2)}s`;
+        const savedDate = new Date(mel.savedAt);
+        header.textContent = `Melody ${index + 1} | BPM: ${mel.bpm} | Duration: ${mel.totalDuration?.toFixed(2)}s | Saved on: ${savedDate.toLocaleString()}`;
         li.appendChild(header);
-        // Build grid view for recorded events.
         li.appendChild(buildGridView(mel.notes, mel.bpm));
-        // Download button.
         let downloadBtn = document.createElement('button');
         downloadBtn.textContent = "Download";
         downloadBtn.style.marginLeft = "10px";
@@ -367,6 +378,11 @@ function updateMelodyList() {
         melodyListEl.appendChild(li);
     });
 }
+
+// Call updateMelodyList on page load
+document.addEventListener('DOMContentLoaded', () => {
+    updateMelodyList();
+});
 
 // Pitch detection using auto-correlation
 function autoCorrelate(buffer, sampleRate) {
