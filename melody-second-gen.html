@@ -26,7 +26,13 @@
 	        </div>
 	        <div id="activeNotes">Active Notes: <ul></ul></div>
 	        <div id="waveformDisplay">Waveform: <!-- canvas or svg can be placed here in future --></div>
-	        <div id="melodyList">Recorded Melody: <ul></ul></div>
+	        <div id="melodyList">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span>Recorded Melody:</span>
+                    <button id="clearMelodiesBtn">Clear Stored Melodies</button>
+                </div>
+                <ul></ul>
+            </div>
 	        <script src="app.js"></script>
         </div>
     </main>

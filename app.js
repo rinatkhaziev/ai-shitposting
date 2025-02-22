@@ -95,68 +95,88 @@ async function initAudio() {
 // New global variable to track pause start time
 let pauseStartTime = null;
 
-function processAudio() {
-    let now = performance.now();
-    let buffer = new Float32Array(analyser.fftSize);
+// New helper: fetch audio buffer data.
+function getAudioBuffer() {
+    const buffer = new Float32Array(analyser.fftSize);
     analyser.getFloatTimeDomainData(buffer);
-    
-    // Draw the waveform using the current audio buffer
-    drawWaveform(buffer);
-    
-    let pitch = autoCorrelate(buffer, audioContext.sampleRate);
-    if (pitch !== -1) {
-        // If a pause was in progress, record it before processing the note
-        if (pauseStartTime !== null) {
-            let pauseDuration = (now - pauseStartTime) / 1000; // in seconds
-            melody.push({ note: "Pause", duration: pauseDuration });
-            pauseStartTime = null;
-        }
-        let noteInfo = frequencyToNoteInfo(pitch);
-        // Only process if deviation is within tolerance
-        if (Math.abs(noteInfo.deviation) <= tolerance) {
-            let newNote = noteInfo.note;
-            // ...candidate note logic as before...
-            if (newNote !== lastDetectedNote) {
-                if (newNote !== candidateNote) {
-                    candidateNote = newNote;
-                    candidateStartTime = now;
-                    candidatePushed = false;
-                } else {
-                    if (!candidatePushed && (now - candidateStartTime) >= DEBOUNCE_TIME) {
-                        if (lastDetectedNote !== null) {
-                            let duration = (now - lastNoteStartTime) / 1000;
-                            melody.push({ note: lastDetectedNote, duration });
-                        }
-                        lastDetectedNote = candidateNote;
-                        lastNoteStartTime = now;
-                        candidatePushed = true;
-                        updateActiveNotes(candidateNote);
-                    }
-                }
-            } else {
-                candidateNote = newNote;
-                candidatePushed = true;
-            }
-            currentNoteEl.textContent = candidateNote;
-            updateDeviationBar(noteInfo.deviation);
-        } else {
-            currentNoteEl.textContent = "No pitch within tolerance";
-            deviationMarkerEl.innerHTML = "";
-            candidateNote = null;
-            candidateStartTime = 0;
-            candidatePushed = false;
-        }
+    return buffer;
+}
+
+// New helper: Process a valid pitch detection.
+function processDetectedPitch(pitch, now) {
+    // If a pause was in progress, record it.
+    if (pauseStartTime !== null) {
+        let pauseDuration = (now - pauseStartTime) / 1000;
+        melody.push({ note: "Pause", duration: pauseDuration });
+        pauseStartTime = null;
+    }
+    const noteInfo = frequencyToNoteInfo(pitch);
+    if (Math.abs(noteInfo.deviation) <= tolerance) {
+        processValidPitch(noteInfo, now);
+        currentNoteEl.textContent = candidateNote;
+        updateDeviationBar(noteInfo.deviation);
     } else {
-        // No pitch detected; start or continue pause
-        if (pauseStartTime === null) {
-            pauseStartTime = now;
-        }
-        currentNoteEl.textContent = "Pause";
+        currentNoteEl.textContent = "No pitch within tolerance";
         deviationMarkerEl.innerHTML = "";
         candidateNote = null;
         candidateStartTime = 0;
         candidatePushed = false;
     }
+}
+
+// New helper: Process when no pitch is detected.
+function processNoPitch(now) {
+    if (pauseStartTime === null) {
+        pauseStartTime = now;
+    }
+    currentNoteEl.textContent = "Pause";
+    deviationMarkerEl.innerHTML = "";
+    candidateNote = null;
+    candidateStartTime = 0;
+    candidatePushed = false;
+    // Trigger update of active notes for pause state.
+    updateActiveNotes("Pause");
+}
+
+// New helper: Encapsulate candidate note logic for valid pitch.
+function processValidPitch(noteInfo, now) {
+    const newNote = noteInfo.note;
+    if (newNote !== lastDetectedNote) {
+        if (newNote !== candidateNote) {
+            candidateNote = newNote;
+            candidateStartTime = now;
+            candidatePushed = false;
+        } else {
+            if (!candidatePushed && (now - candidateStartTime) >= DEBOUNCE_TIME) {
+                if (lastDetectedNote !== null) {
+                    let duration = (now - lastNoteStartTime) / 1000;
+                    melody.push({ note: lastDetectedNote, duration });
+                }
+                lastDetectedNote = candidateNote;
+                lastNoteStartTime = now;
+                candidatePushed = true;
+                updateActiveNotes(candidateNote);
+            }
+        }
+    } else {
+        candidateNote = newNote;
+        candidatePushed = true;
+    }
+}
+
+// Refactored processAudio using the new helper functions.
+function processAudio() {
+    const now = performance.now();
+    const buffer = getAudioBuffer();
+    drawWaveform(buffer);
+    const pitch = autoCorrelate(buffer, audioContext.sampleRate);
+    
+    if (pitch !== -1) {
+        processDetectedPitch(pitch, now);
+    } else {
+        processNoPitch(now);
+    }
+    
     if (recording) {
         requestAnimationFrame(processAudio);
     }
@@ -355,6 +375,15 @@ function updateMelodyList() {
         });
         li.appendChild(downloadBtn);
         melodyListEl.appendChild(li);
+    });
+}
+
+// Add "Clear Stored Melodies" button functionality
+const clearMelodiesBtn = document.getElementById('clearMelodiesBtn');
+if (clearMelodiesBtn) {
+    clearMelodiesBtn.addEventListener('click', () => {
+        localStorage.removeItem('melodies');
+        updateMelodyList();
     });
 }
 
