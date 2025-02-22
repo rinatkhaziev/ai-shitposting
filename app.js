@@ -102,6 +102,64 @@ function getAudioBuffer() {
     return buffer;
 }
 
+// NEW: Helper to normalize event duration to nearest 32nd note and clamp between 16th and 1 beat.
+function normalizeDuration(duration) {
+    const beatDuration = 60 / BPM;
+    const quantStep = beatDuration / 8; // 32nd note step
+    let normalized = Math.round(duration / quantStep) * quantStep;
+    const minDuration = beatDuration / 4; // 16th note
+    const maxDuration = beatDuration;      // whole beat
+    if (normalized < minDuration) normalized = minDuration;
+    if (normalized > maxDuration) normalized = maxDuration;
+    return normalized;
+}
+
+// NEW: Helper to detect dominant tone using frequency bin analysis.
+function detectDominantTone() {
+    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(frequencyData);
+    let maxVal = -Infinity, maxIndex = -1;
+    for (let i = 0; i < frequencyData.length; i++) {
+        if (frequencyData[i] > maxVal) {
+            maxVal = frequencyData[i];
+            maxIndex = i;
+        }
+    }
+    // Calculate frequency from bin index.
+    const nyquist = audioContext.sampleRate / 2;
+    return maxIndex * nyquist / frequencyData.length;
+}
+
+// NEW: Global variable to throttle processing (32nd note period).
+let lastProcessTime = 0;
+
+// Update processAudio to trigger processing each 32nd note.
+function processAudio() {
+    const now = performance.now();
+    const beatDuration = 60 / BPM * 1000;  // in ms
+    const interval32nd = beatDuration / 8;
+    if (now - lastProcessTime < interval32nd) {
+        if (recording) requestAnimationFrame(processAudio);
+        return;
+    }
+    lastProcessTime = now;
+
+    const buffer = getAudioBuffer();
+    drawWaveform(buffer);
+    // Use dominant tone detection instead of autoCorrelate.
+    const pitch = detectDominantTone();
+    
+    if (pitch !== -1) {
+        processDetectedPitch(pitch, now);
+    } else {
+        processNoPitch(now);
+    }
+    
+    if (recording) {
+        requestAnimationFrame(processAudio);
+    }
+}
+
 // New helper: Process a valid pitch detection.
 function processDetectedPitch(pitch, now) {
     // If a pause was in progress, record it only if long enough.
@@ -132,6 +190,7 @@ function processNoPitch(now) {
     // If an active note exists, finalize it.
     if (lastDetectedNote !== null) {
         let duration = (now - lastNoteStartTime) / 1000;
+        duration = normalizeDuration(duration);
         melody.push({ note: lastDetectedNote, duration });
         lastDetectedNote = null;
     }
@@ -139,7 +198,7 @@ function processNoPitch(now) {
     candidateStartTime = 0;
     candidatePushed = false;
     // Start pause timer if not set.
-    if (pauseStartTime === null) {
+    if (melody.length > 0 && pauseStartTime === null) {
         pauseStartTime = now;
     }
     currentNoteEl.textContent = "Pause";
@@ -156,13 +215,14 @@ function processValidPitch(noteInfo, now) {
         candidateStartTime = now;
         candidatePushed = false;
         // Update UI immediately.
-        currentNoteEl.textContent = newNote;
-        updateDeviationBar(noteInfo.deviation);
+        // currentNoteEl.textContent = newNote;
+        // updateDeviationBar(noteInfo.deviation);
         return;
     }
     // If the incoming note differs from the candidate, finalize the previous candidate.
     if (candidateNote !== newNote) {
         let duration = (now - candidateStartTime) / 1000;
+        duration = normalizeDuration(duration);
         melody.push({ note: candidateNote, duration });
         // Reset candidate for the new note.
         candidateNote = newNote;
@@ -181,6 +241,7 @@ function processValidPitch(noteInfo, now) {
         // If a previous event exists, finalize its duration.
         if (lastDetectedNote !== null) {
             let prevDuration = (now - lastNoteStartTime) / 1000;
+            prevDuration = normalizeDuration(prevDuration);
             melody.push({ note: lastDetectedNote, duration: prevDuration });
         }
         lastDetectedNote = candidateNote;
