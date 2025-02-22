@@ -29,7 +29,7 @@ const activeNotesEl = document.getElementById('activeNotes');
 // New global variables for debouncing note detection
 let candidateNote = null;
 let candidateStartTime = 0;
-const DEBOUNCE_TIME = 200; // in milliseconds
+const DEBOUNCE_TIME = 50; // in milliseconds
 
 // New global variable for debouncing note detection flag
 let candidatePushed = false;
@@ -104,10 +104,13 @@ function getAudioBuffer() {
 
 // New helper: Process a valid pitch detection.
 function processDetectedPitch(pitch, now) {
-    // If a pause was in progress, record it.
+    // If a pause was in progress, record it only if long enough.
     if (pauseStartTime !== null) {
-        let pauseDuration = (now - pauseStartTime) / 1000;
-        melody.push({ note: "Pause", duration: pauseDuration });
+        const pauseDuration = (now - pauseStartTime) / 1000;
+        const minPauseDuration = 60 / (BPM * 4); // duration of 16th note
+        if (pauseDuration >= minPauseDuration) {
+            melody.push({ note: "Pause", duration: pauseDuration });
+        }
         pauseStartTime = null;
     }
     const noteInfo = frequencyToNoteInfo(pitch);
@@ -124,44 +127,69 @@ function processDetectedPitch(pitch, now) {
     }
 }
 
-// New helper: Process when no pitch is detected.
+// Updated helper: Process when no pitch is detected.
 function processNoPitch(now) {
+    // If an active note exists, finalize it.
+    if (lastDetectedNote !== null) {
+        let duration = (now - lastNoteStartTime) / 1000;
+        melody.push({ note: lastDetectedNote, duration });
+        lastDetectedNote = null;
+    }
+    candidateNote = null;
+    candidateStartTime = 0;
+    candidatePushed = false;
+    // Start pause timer if not set.
     if (pauseStartTime === null) {
         pauseStartTime = now;
     }
     currentNoteEl.textContent = "Pause";
     deviationMarkerEl.innerHTML = "";
-    candidateNote = null;
-    candidateStartTime = 0;
-    candidatePushed = false;
-    // Trigger update of active notes for pause state.
     updateActiveNotes("Pause");
 }
 
-// New helper: Encapsulate candidate note logic for valid pitch.
+// Updated helper: Process when a valid pitch is detected.
 function processValidPitch(noteInfo, now) {
     const newNote = noteInfo.note;
-    if (newNote !== lastDetectedNote) {
-        if (newNote !== candidateNote) {
-            candidateNote = newNote;
-            candidateStartTime = now;
-            candidatePushed = false;
-        } else {
-            if (!candidatePushed && (now - candidateStartTime) >= DEBOUNCE_TIME) {
-                if (lastDetectedNote !== null) {
-                    let duration = (now - lastNoteStartTime) / 1000;
-                    melody.push({ note: lastDetectedNote, duration });
-                }
-                lastDetectedNote = candidateNote;
-                lastNoteStartTime = now;
-                candidatePushed = true;
-                updateActiveNotes(candidateNote);
-            }
-        }
-    } else {
+    // If no candidate exists, start one.
+    if (candidateNote === null) {
         candidateNote = newNote;
-        candidatePushed = true;
+        candidateStartTime = now;
+        candidatePushed = false;
+        // Update UI immediately.
+        currentNoteEl.textContent = newNote;
+        updateDeviationBar(noteInfo.deviation);
+        return;
     }
+    // If the incoming note differs from the candidate, finalize the previous candidate.
+    if (candidateNote !== newNote) {
+        let duration = (now - candidateStartTime) / 1000;
+        melody.push({ note: candidateNote, duration });
+        // Reset candidate for the new note.
+        candidateNote = newNote;
+        candidateStartTime = now;
+        candidatePushed = false;
+        lastDetectedNote = newNote;
+        lastNoteStartTime = now;
+        updateActiveNotes(newNote);
+        currentNoteEl.textContent = newNote;
+        updateDeviationBar(noteInfo.deviation);
+        return;
+    }
+    // For the same candidate note.
+    if (!candidatePushed && (now - candidateStartTime) >= DEBOUNCE_TIME) {
+        // Finalize the candidate event.
+        // If a previous event exists, finalize its duration.
+        if (lastDetectedNote !== null) {
+            let prevDuration = (now - lastNoteStartTime) / 1000;
+            melody.push({ note: lastDetectedNote, duration: prevDuration });
+        }
+        lastDetectedNote = candidateNote;
+        lastNoteStartTime = now;
+        candidatePushed = true;
+        updateActiveNotes(newNote);
+    }
+    currentNoteEl.textContent = newNote;
+    updateDeviationBar(noteInfo.deviation);
 }
 
 // Refactored processAudio using the new helper functions.
