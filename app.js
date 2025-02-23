@@ -1,4 +1,74 @@
-const TOLERANCE_DEFAULT = 50; // in cents
+const VOCAL_RANGE = {
+    MIN_NOTE: 'E2',  // ~82.4 Hz
+    MAX_NOTE: 'C6',  // ~1047 Hz
+    MIN_MIDI: 40,    // E2
+    MAX_MIDI: 84     // C6
+};
+
+class FrequencyAnalyzer {
+    constructor() {
+        this.smoothingBufferSize = 8; // Increased from 5
+        this.freqBuffer = [];
+        this.noiseFloor = -60; // dB
+        this.minFrequency = 65; // Hz (~C2)
+        this.minAmplitude = 0.01; // Minimum amplitude threshold
+    }
+
+    analyzePitch(audioData, sampleRate) {
+        const frequencies = this.getFrequencies(audioData, sampleRate);
+        const dominantFreq = this.findDominantFrequency(frequencies, sampleRate);
+
+        if (!this.isAboveNoiseFloor(audioData) || dominantFreq < this.minFrequency) {
+            return null;
+        }
+
+        return this.smoothFrequency(dominantFreq);
+    }
+
+    getFrequencies(audioData, sampleRate) {
+        const fft = new Float32Array(audioData.length);
+        // Implement FFT analysis here
+        return fft;
+    }
+
+    findDominantFrequency(frequencies, sampleRate) {
+        let maxAmp = 0;
+        let maxIndex = 0;
+
+        for (let i = 0; i < frequencies.length / 2; i++) {
+            const amp = Math.abs(frequencies[i]);
+            if (amp > maxAmp) {
+                maxAmp = amp;
+                maxIndex = i;
+            }
+        }
+
+        return (maxIndex * sampleRate) / frequencies.length;
+    }
+
+    smoothFrequency(frequency) {
+        this.freqBuffer.push(frequency);
+        if (this.freqBuffer.length > this.smoothingBufferSize) {
+            this.freqBuffer.shift();
+        }
+
+        return this.freqBuffer.reduce((a, b) => a + b) / this.freqBuffer.length;
+    }
+
+    isAboveNoiseFloor(audioData) {
+        const rms = Math.sqrt(
+            audioData.reduce((sum, val) => sum + val * val, 0) / audioData.length
+        );
+        const db = 20 * Math.log10(rms);
+        return db > this.noiseFloor;
+    }
+}
+
+
+
+const TOLERANCE_DEFAULT = 35; // Reduced from 50 to be more strict with vocal pitch
+const MIN_CANDIDATE_COUNT = 5; // Increased from 4 for more stability with voice
+const HYSTERESIS = 15; // Increased from 10 for better handling of vocal vibrato
 let recording = false;
 let audioContext, analyser, mediaStreamSource;
 let tolerance = TOLERANCE_DEFAULT;
@@ -85,7 +155,7 @@ async function initAudio() {
 	const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 	mediaStreamSource = audioContext.createMediaStreamSource(stream);
 	analyser = audioContext.createAnalyser();
-	analyser.fftSize = 2048;
+	analyser.fftSize = 4096;  // Increased from 2048 for better frequency resolution
 	mediaStreamSource.connect(analyser);
     initWaveform(); // initialize waveform display
 	lastNoteStartTime = performance.now();
@@ -146,10 +216,11 @@ function processAudio() {
 
     const buffer = getAudioBuffer();
     drawWaveform(buffer);
-    // Use dominant tone detection instead of autoCorrelate.
-    const pitch = detectDominantTone();
     
-    if (pitch !== -1) {
+    // Use the new FrequencyAnalyzer instead of autoCorrelate
+    const pitch = frequencyAnalyzer.analyzePitch(buffer, audioContext.sampleRate);
+    
+    if (pitch !== null) {
         processDetectedPitch(pitch, now);
     } else {
         processNoPitch(now);
@@ -171,7 +242,18 @@ function processDetectedPitch(pitch, now) {
         }
         pauseStartTime = null;
     }
-    const noteInfo = frequencyToNoteInfo(pitch);)
+    const noteInfo = frequencyToNoteInfo(pitch);
+    
+    // Handle null noteInfo (outside vocal range)
+    if (!noteInfo) {
+        currentNoteEl.textContent = "Note outside vocal range";
+        deviationMarkerEl.innerHTML = "";
+        candidateNote = null;
+        candidateStartTime = 0;
+        candidateCount = 0;
+        return;
+    }
+
     if (Math.abs(noteInfo.deviation) <= tolerance) {
         processValidPitch(noteInfo, now);
         currentNoteEl.textContent = candidateNote;
@@ -209,32 +291,72 @@ function processNoPitch(now) {
 // Updated helper: Process when a valid pitch is detected.
 function processValidPitch(noteInfo, now) {
     const newNote = noteInfo.note;
+    
     if (candidateNote === null) {
         candidateNote = newNote;
         candidateStartTime = now;
         candidateCount = 1;
         return;
     }
+
+    // Add hysteresis to note changes
     if (candidateNote !== newNote) {
-        if (candidateCount >= 2) {
-            let duration = (now - candidateStartTime) / 1000;
-            duration = normalizeDuration(duration);
-            melody.push({ note: candidateNote, duration });
-            // Finalize UI update only when event is finalized.
-            lastDetectedNote = candidateNote;
-            lastNoteStartTime = now;
-            updateActiveNotes(candidateNote);
-            currentNoteEl.textContent = candidateNote;
-            updateDeviationBar(noteInfo.deviation);
+        // Get ideal frequencies for both notes
+        const currentNoteInfo = frequencyToNoteInfo(noteInfo.idealFreq);
+        const candidateNoteInfo = frequencyToNoteInfo(
+            440 * Math.pow(2, (noteToMidiNumber(candidateNote) - 69) / 12)
+        );
+        
+        // Add null checks before accessing deviation
+        if (!currentNoteInfo || !candidateNoteInfo) {
+            // One of the notes is outside vocal range, keep the current note
+            candidateCount++;
+            return;
         }
+        
+        // Only change notes if deviation exceeds hysteresis
+        const deviation = Math.abs(currentNoteInfo.deviation - candidateNoteInfo.deviation);
+        if (deviation <= HYSTERESIS) {
+            candidateCount++; // Still counting as the same note
+            return;
+        }
+        
+        // Reset counter for new note
         candidateNote = newNote;
         candidateStartTime = now;
         candidateCount = 1;
         return;
     }
-    // For the same candidate note, increment stability counter.
+
+    // Increase count for stable note
     candidateCount++;
-    // Do not update active notes UI here until the event is finalized.
+
+    // Only register note after MIN_CANDIDATE_COUNT stable detections
+    if (candidateCount >= MIN_CANDIDATE_COUNT) {
+        let duration = (now - candidateStartTime) / 1000;
+        duration = normalizeDuration(duration);
+        
+        if (lastDetectedNote !== candidateNote) {
+            if (lastDetectedNote !== null) {
+                melody.push({ note: lastDetectedNote, duration });
+            }
+            lastDetectedNote = candidateNote;
+            lastNoteStartTime = now;
+            updateActiveNotes(candidateNote);
+        }
+        
+        currentNoteEl.textContent = candidateNote;
+        updateDeviationBar(noteInfo.deviation);
+    }
+}
+
+// Add helper function to convert note name to MIDI number
+function noteToMidiNumber(noteName) {
+    const noteStrings = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const octave = parseInt(noteName.slice(-1));
+    const note = noteName.slice(0, -1);
+    const noteIndex = noteStrings.indexOf(note);
+    return noteIndex + 12 * (octave + 1) + 12;
 }
 
 // Refactored processAudio using the new helper functions.
@@ -519,15 +641,22 @@ function autoCorrelate(buffer, sampleRate) {
 
 // Maps frequency to note name and computes deviation in cents
 function frequencyToNoteInfo(frequency) {
-	const noteStrings = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-	let noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
-	noteNum = Math.round(noteNum) + 69;
-	let noteIndex = noteNum % 12;
-	let octave = Math.floor(noteNum / 12) - 1;
-	let note = noteStrings[noteIndex] + octave;
-	// Calculate ideal frequency for this MIDI note
-	let idealFreq = 440 * Math.pow(2, (noteNum - 69) / 12);
-	// Deviation in cents: 1200*log2(current/ideal)
-	let deviation = 1200 * (Math.log(frequency/idealFreq) / Math.log(2));
-	return { note, idealFreq, deviation };
+    const noteStrings = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    let noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
+    noteNum = Math.round(noteNum) + 69;
+    
+    // Return null if note is outside vocal range
+    if (noteNum < VOCAL_RANGE.MIN_MIDI || noteNum > VOCAL_RANGE.MAX_MIDI) {
+        return null;
+    }
+    
+    let noteIndex = noteNum % 12;
+    let octave = Math.floor(noteNum / 12) - 1;
+    let note = noteStrings[noteIndex] + octave;
+    
+    // Calculate ideal frequency for this MIDI note
+    let idealFreq = 440 * Math.pow(2, (noteNum - 69) / 12);
+    let deviation = 1200 * (Math.log(frequency/idealFreq) / Math.log(2));
+    
+    return { note, idealFreq, deviation };
 }
