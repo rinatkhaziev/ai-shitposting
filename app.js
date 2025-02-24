@@ -24,6 +24,10 @@ let melody = [];
 let lastDetectedNote = null;
 let lastNoteStartTime = null;
 
+// Add these new timing variables
+let recordingStartTime = null;
+let lastEventTime = null;
+
 // UI Elements: updated to match new current note box structure
 const recordButton = document.getElementById('recordButton');
 const currentNoteEl = document.getElementById('noteDisplay');
@@ -42,6 +46,14 @@ const activeNotesEl = document.getElementById('activeNotes');
 let candidateNote = null;
 let candidateStartTime = 0;
 const DEBOUNCE_TIME = 50; // in milliseconds
+
+
+// Add new constants for pitch detection
+const NOTE_CHANGE_THRESHOLD = 30; // cents
+const FREQ_HISTORY_SIZE = 5;
+
+// Add new state variables for frequency tracking
+let frequencyHistory = [];
 
 // New global variable for debouncing note detection flag
 let candidateCount = 0;  // NEW counter for stable candidate note
@@ -110,44 +122,6 @@ async function initAudio() {
 // New global variable to track pause start time
 let pauseStartTime = null;
 
-// New helper: fetch audio buffer data.
-function getAudioBuffer() {
-    const buffer = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(buffer);
-    return buffer;
-}
-
-// NEW: Helper to normalize event duration to nearest 32nd note and clamp between 16th and 1 beat.
-function normalizeDuration(duration) {
-    const beatDuration = 60 / BPM;
-    const quantStep = beatDuration / 8; // 32nd note step
-    let normalized = Math.round(duration / quantStep) * quantStep;
-    const minDuration = beatDuration / 4; // 16th note
-    const maxDuration = beatDuration;      // whole beat
-    if (normalized < minDuration) normalized = minDuration;
-    if (normalized > maxDuration) normalized = maxDuration;
-    return normalized;
-}
-
-// NEW: Helper to detect dominant tone using frequency bin analysis.
-function detectDominantTone() {
-    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(frequencyData);
-    let maxVal = -Infinity, maxIndex = -1;
-    for (let i = 0; i < frequencyData.length; i++) {
-        if (frequencyData[i] > maxVal) {
-            maxVal = frequencyData[i];
-            maxIndex = i;
-        }
-    }
-    // Calculate frequency from bin index.
-    const nyquist = audioContext.sampleRate / 2;
-    return maxIndex * nyquist / frequencyData.length;
-}
-
-// NEW: Global variable to throttle processing (32nd note period).
-let lastProcessTime = 0;
-
 // New helper: Process a valid pitch detection.
 function processDetectedPitch(pitch, now) {
     const noteInfo = frequencyToNoteInfo(pitch);
@@ -171,20 +145,30 @@ function processDetectedPitch(pitch, now) {
 
 // Updated helper: Process when no pitch is detected.
 function processNoPitch(now) {
-    // If an active note exists, finalize it.
+    if (!recordingStartTime) return;
+
     if (lastDetectedNote !== null) {
-        let duration = (now - lastNoteStartTime) / 1000;
-        duration = normalizeDuration(duration);
-        melody.push({ note: lastDetectedNote, duration });
-        lastDetectedNote = null;
+        const noteDuration = (now - lastNoteStartTime) / 1000;
+        if (noteDuration >= 0.1) { // Minimum note duration 100ms
+            melody.push({
+                note: lastDetectedNote,
+                duration: noteDuration,
+                timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
+                frequency: lastDetectedFrequency // Add this line
+            });
+            lastDetectedNote = null;
+            lastEventTime = now;
+        }
     }
+
+    if (pauseStartTime === null) {
+        pauseStartTime = now;
+    }
+
     candidateNote = null;
     candidateStartTime = 0;
     candidateCount = 0;
-    // Start pause timer if not set.
-    if (melody.length > 0 && pauseStartTime === null) {
-        pauseStartTime = now;
-    }
+    
     currentNoteEl.textContent = "Pause";
     deviationMarkerEl.innerHTML = "";
     updateActiveNotes("Pause");
@@ -193,7 +177,26 @@ function processNoPitch(now) {
 // Updated helper: Process when a valid pitch is detected.
 function processValidPitch(noteInfo, now) {
     const newNote = noteInfo.note;
+    const newFrequency = noteInfo.frequency; // Add this line
     
+    if (!recordingStartTime) {
+        recordingStartTime = now;
+        lastEventTime = now;
+    }
+
+    if (pauseStartTime !== null) {
+        // Coming out of a pause
+        const pauseDuration = (now - pauseStartTime) / 1000;
+        if (pauseDuration >= 0.1) { // Minimum pause duration 100ms
+            melody.push({
+                note: "Pause",
+                duration: pauseDuration,
+                timestamp: (pauseStartTime - recordingStartTime) / 1000
+            });
+        }
+        pauseStartTime = null;
+    }
+
     if (candidateNote === null) {
         candidateNote = newNote;
         candidateStartTime = now;
@@ -201,55 +204,64 @@ function processValidPitch(noteInfo, now) {
         return;
     }
 
-    // Add hysteresis to note changes
+    // Note change logic
     if (candidateNote !== newNote) {
-        // Get ideal frequencies for both notes
-        const currentNoteInfo = frequencyToNoteInfo(noteInfo.idealFreq);
-        const candidateNoteInfo = frequencyToNoteInfo(
-            440 * Math.pow(2, (noteToMidiNumber(candidateNote) - 69) / 12)
-        );
+        // Only change notes if the deviation is significant
+        const currentNoteFreq = 440 * Math.pow(2, (noteToMidiNumber(candidateNote) - 69) / 12);
+        const newNoteFreq = noteInfo.frequency;
+        const centsDiff = Math.abs(1200 * Math.log2(newNoteFreq / currentNoteFreq));
         
-        // Add null checks before accessing deviation
-        if (!currentNoteInfo || !candidateNoteInfo) {
-            // One of the notes is outside vocal range, keep the current note
+        if (centsDiff < NOTE_CHANGE_THRESHOLD) {
+            // Keep the current note if the difference is small
             candidateCount++;
             return;
         }
         
-        // Only change notes if deviation exceeds hysteresis
-        const deviation = Math.abs(currentNoteInfo.deviation - candidateNoteInfo.deviation);
-        if (deviation <= HYSTERESIS) {
-            candidateCount++; // Still counting as the same note
-            return;
+        if (candidateCount >= MIN_CANDIDATE_COUNT) {
+            // Record the previous note
+            if (lastDetectedNote !== null) {
+                const noteDuration = (now - lastNoteStartTime) / 1000;
+                if (noteDuration >= 0.1) { // Minimum duration check
+                    melody.push({
+                        note: lastDetectedNote,
+                        duration: noteDuration,
+                        timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
+                        frequency: lastDetectedFrequency // Add this line
+                    });
+                }
+            }
+            lastDetectedNote = newNote;
+            lastDetectedFrequency = newFrequency; // Add this line
+            lastNoteStartTime = now;
+            lastEventTime = now;
         }
-        
-        // Reset counter for new note
+        // Reset for new note
         candidateNote = newNote;
         candidateStartTime = now;
         candidateCount = 1;
-        return;
-    }
-
-    // Increase count for stable note
-    candidateCount++;
-
-    // Only register note after MIN_CANDIDATE_COUNT stable detections
-    if (candidateCount >= MIN_CANDIDATE_COUNT) {
-        let duration = (now - candidateStartTime) / 1000;
-        duration = normalizeDuration(duration);
-        
-        if (lastDetectedNote !== candidateNote) {
+    } else {
+        candidateCount++;
+        if (candidateCount === MIN_CANDIDATE_COUNT && lastDetectedNote !== newNote) {
+            // First stable detection of a new note
             if (lastDetectedNote !== null) {
-                melody.push({ note: lastDetectedNote, duration });
+                const noteDuration = (candidateStartTime - lastNoteStartTime) / 1000;
+                melody.push({
+                    note: lastDetectedNote,
+                    duration: noteDuration,
+                    timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
+                    frequency: lastDetectedFrequency // Add this line
+                });
             }
-            lastDetectedNote = candidateNote;
-            lastNoteStartTime = now;
-            updateActiveNotes(candidateNote);
+            lastDetectedNote = newNote;
+            lastDetectedFrequency = newFrequency; // Add this line
+            lastNoteStartTime = candidateStartTime;
+            lastEventTime = now;
         }
-        
-        currentNoteEl.textContent = candidateNote;
-        updateDeviationBar(noteInfo.deviation);
     }
+
+    updateActiveNotes(newNote);
+    currentNoteEl.textContent = newNote;
+    updateDeviationBar(noteInfo.deviation);
 }
 
 // Add helper function to convert note name to MIDI number
@@ -323,7 +335,9 @@ function buildGridView(events, bpm) {
             box.classList.add("pause");
         }
         box.style.width = `${boxWidth}px`;
-        box.textContent = `${event.note} (${effectiveDuration.toFixed(2)}s)`;
+        box.textContent = event.note === "Pause" 
+            ? `Pause (${effectiveDuration.toFixed(2)}s)`
+            : `${event.note} (${effectiveDuration.toFixed(2)}s, ${event.frequency?.toFixed(1)} Hz)`;
         gridContainer.appendChild(box);
         currentTime = eventEnd;
     });
@@ -366,25 +380,42 @@ function updateDeviationBar(deviation) {
 }
 
 recordButton.addEventListener('click', () => {
-	recording = !recording;
-	recordButton.textContent = recording ? "Stop Recording" : "Start Recording";
-	if(recording) {
-		// Reset melody state when starting
-		melody = [];
-		lastDetectedNote = null;
-		lastNoteStartTime = performance.now();
-		initAudio();
-	} else {
-		// Finalize last note duration
-		let now = performance.now();
-		if(lastDetectedNote !== null) {
-			let duration = (now - lastNoteStartTime) / 1000;
-			melody.push({ note: lastDetectedNote, duration });
-		}
-		// Stop audio stream (if needed, additional cleanup can be done here)
-		// Save melody to storage
-		saveMelody(melody);
-	}
+    recording = !recording;
+    recordButton.textContent = recording ? "Stop Recording" : "Start Recording";
+    if (recording) {
+        melody = [];
+        lastDetectedNote = null;
+        lastDetectedFrequency = null; // Add this line
+        lastNoteStartTime = null;
+        recordingStartTime = null;
+        pauseStartTime = null;
+        lastEventTime = null;
+        frequencyHistory = [];
+        initAudio();
+    } else {
+        const now = performance.now();
+        if (lastDetectedNote !== null) {
+            const noteDuration = (now - lastNoteStartTime) / 1000;
+            melody.push({
+                note: lastDetectedNote,
+                duration: noteDuration,
+                timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
+                frequency: lastDetectedFrequency // Add this line
+            });
+        } else if (pauseStartTime !== null) {
+            const pauseDuration = (now - pauseStartTime) / 1000;
+            if (pauseDuration >= 0.1) {
+                melody.push({
+                    note: "Pause",
+                    duration: pauseDuration,
+                    timestamp: (pauseStartTime - recordingStartTime) / 1000
+                });
+            }
+        }
+        // Sort melody events by timestamp
+        melody.sort((a, b) => a.timestamp - b.timestamp);
+        saveMelody(melody);
+    }
 });
 
 // Download melody functionality
@@ -589,22 +620,53 @@ function autoCorrelate(buffer, sampleRate) {
 
 // Maps frequency to note name and computes deviation in cents
 function frequencyToNoteInfo(frequency) {
+    // Average the frequency over recent samples
+    frequencyHistory.push(frequency);
+    if (frequencyHistory.length > FREQ_HISTORY_SIZE) {
+        frequencyHistory.shift();
+    }
+    const avgFrequency = frequencyHistory.reduce((sum, f) => sum + f, 0) / frequencyHistory.length;
+    
     const noteStrings = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    let noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
-    noteNum = Math.round(noteNum) + 69;
+    let noteNum = 12 * (Math.log(avgFrequency / 440) / Math.log(2));
+    let roundedNoteNum = Math.round(noteNum) + 69;
     
     // Return null if note is outside vocal range
-    if (noteNum < VOCAL_RANGE.MIN_MIDI || noteNum > VOCAL_RANGE.MAX_MIDI) {
+    if (roundedNoteNum < VOCAL_RANGE.MIN_MIDI || roundedNoteNum > VOCAL_RANGE.MAX_MIDI) {
         return null;
     }
     
-    let noteIndex = noteNum % 12;
-    let octave = Math.floor(noteNum / 12) - 1;
-    let note = noteStrings[noteIndex] + octave;
-    
     // Calculate ideal frequency for this MIDI note
-    let idealFreq = 440 * Math.pow(2, (noteNum - 69) / 12);
-    let deviation = 1200 * (Math.log(frequency/idealFreq) / Math.log(2));
+    const idealFreq = 440 * Math.pow(2, (roundedNoteNum - 69) / 12);
+    const deviation = 1200 * (Math.log(avgFrequency/idealFreq) / Math.log(2));
     
-    return { note, idealFreq, deviation };
+    // If deviation is too large, try adjacent notes
+    if (Math.abs(deviation) > 50) { // 50 cents threshold
+        const alternativeNotes = [
+            roundedNoteNum - 1,
+            roundedNoteNum + 1
+        ];
+        
+        const bestNote = alternativeNotes.reduce((best, noteNum) => {
+            const freq = 440 * Math.pow(2, (noteNum - 69) / 12);
+            const dev = Math.abs(1200 * (Math.log(avgFrequency/freq) / Math.log(2)));
+            return dev < Math.abs(best.deviation) ? { noteNum, deviation: dev } : best;
+        }, { noteNum: roundedNoteNum, deviation: Math.abs(deviation) });
+        
+        roundedNoteNum = bestNote.noteNum;
+    }
+    
+    const noteIndex = (roundedNoteNum + 12) % 12;
+    const octave = Math.floor(roundedNoteNum / 12) - 1;
+    const note = noteStrings[noteIndex] + octave;
+    
+    return { 
+        note,
+        idealFreq,
+        deviation,
+        frequency: avgFrequency
+    };
 }
+
+// Add near the top with other state variables
+let lastDetectedFrequency = null;
