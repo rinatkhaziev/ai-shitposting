@@ -1,69 +1,11 @@
+import { MidiUtils } from './audio/MidiUtils.js';
+import { FrequencyAnalyzer } from './audio/FrequencyAnalyzer.js';
 const VOCAL_RANGE = {
     MIN_NOTE: 'E2',  // ~82.4 Hz
     MAX_NOTE: 'C6',  // ~1047 Hz
     MIN_MIDI: 40,    // E2
     MAX_MIDI: 84     // C6
 };
-
-class FrequencyAnalyzer {
-    constructor() {
-        this.smoothingBufferSize = 8; // Increased from 5
-        this.freqBuffer = [];
-        this.noiseFloor = -60; // dB
-        this.minFrequency = 65; // Hz (~C2)
-        this.minAmplitude = 0.01; // Minimum amplitude threshold
-    }
-
-    analyzePitch(audioData, sampleRate) {
-        const frequencies = this.getFrequencies(audioData, sampleRate);
-        const dominantFreq = this.findDominantFrequency(frequencies, sampleRate);
-
-        if (!this.isAboveNoiseFloor(audioData) || dominantFreq < this.minFrequency) {
-            return null;
-        }
-
-        return this.smoothFrequency(dominantFreq);
-    }
-
-    getFrequencies(audioData, sampleRate) {
-        const fft = new Float32Array(audioData.length);
-        // Implement FFT analysis here
-        return fft;
-    }
-
-    findDominantFrequency(frequencies, sampleRate) {
-        let maxAmp = 0;
-        let maxIndex = 0;
-
-        for (let i = 0; i < frequencies.length / 2; i++) {
-            const amp = Math.abs(frequencies[i]);
-            if (amp > maxAmp) {
-                maxAmp = amp;
-                maxIndex = i;
-            }
-        }
-
-        return (maxIndex * sampleRate) / frequencies.length;
-    }
-
-    smoothFrequency(frequency) {
-        this.freqBuffer.push(frequency);
-        if (this.freqBuffer.length > this.smoothingBufferSize) {
-            this.freqBuffer.shift();
-        }
-
-        return this.freqBuffer.reduce((a, b) => a + b) / this.freqBuffer.length;
-    }
-
-    isAboveNoiseFloor(audioData) {
-        const rms = Math.sqrt(
-            audioData.reduce((sum, val) => sum + val * val, 0) / audioData.length
-        );
-        const db = 20 * Math.log10(rms);
-        return db > this.noiseFloor;
-    }
-}
-
 
 
 const TOLERANCE_DEFAULT = 35; // Reduced from 50 to be more strict with vocal pitch
@@ -112,6 +54,8 @@ if(bpmInput) {
     });
 }
 
+const frequencyAnalyzer = new FrequencyAnalyzer();
+
 // Initialize waveform canvas
 function initWaveform() {
     // Create and insert canvas into waveformDisplay container
@@ -151,15 +95,16 @@ function drawWaveform(buffer) {
 
 // Initialize Audio and Pitch Detection
 async function initAudio() {
-	audioContext = new (window.AudioContext || window.webkitAudioContext)();
-	const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-	mediaStreamSource = audioContext.createMediaStreamSource(stream);
-	analyser = audioContext.createAnalyser();
-	analyser.fftSize = 4096;  // Increased from 2048 for better frequency resolution
-	mediaStreamSource.connect(analyser);
-    initWaveform(); // initialize waveform display
-	lastNoteStartTime = performance.now();
-	processAudio();
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaStreamSource = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;  // Reduced from 4096 for faster processing
+    analyser.smoothingTimeConstant = 0.8;  // Add smoothing
+    mediaStreamSource.connect(analyser);
+    initWaveform();
+    lastNoteStartTime = performance.now();
+    processAudio();
 }
 
 // New global variable to track pause start time
@@ -203,67 +148,24 @@ function detectDominantTone() {
 // NEW: Global variable to throttle processing (32nd note period).
 let lastProcessTime = 0;
 
-// Update processAudio to trigger processing each 32nd note.
-function processAudio() {
-    const now = performance.now();
-    const beatDuration = 60 / BPM * 1000;  // in ms
-    const interval32nd = beatDuration / 8;
-    if (now - lastProcessTime < interval32nd) {
-        if (recording) requestAnimationFrame(processAudio);
-        return;
-    }
-    lastProcessTime = now;
-
-    const buffer = getAudioBuffer();
-    drawWaveform(buffer);
-    
-    // Use the new FrequencyAnalyzer instead of autoCorrelate
-    const pitch = frequencyAnalyzer.analyzePitch(buffer, audioContext.sampleRate);
-    
-    if (pitch !== null) {
-        processDetectedPitch(pitch, now);
-    } else {
-        processNoPitch(now);
-    }
-    
-    if (recording) {
-        requestAnimationFrame(processAudio);
-    }
-}
-
 // New helper: Process a valid pitch detection.
 function processDetectedPitch(pitch, now) {
-    // If a pause was in progress, record it only if long enough.
-    if (pauseStartTime !== null) {
-        const pauseDuration = (now - pauseStartTime) / 1000;
-        const minPauseDuration = 60 / (BPM * 4); // duration of 16th note
-        if (pauseDuration >= minPauseDuration) {
-            melody.push({ note: "Pause", duration: pauseDuration });
-        }
-        pauseStartTime = null;
-    }
     const noteInfo = frequencyToNoteInfo(pitch);
     
-    // Handle null noteInfo (outside vocal range)
     if (!noteInfo) {
-        currentNoteEl.textContent = "Note outside vocal range";
-        deviationMarkerEl.innerHTML = "";
-        candidateNote = null;
-        candidateStartTime = 0;
-        candidateCount = 0;
+        processNoPitch(now);
         return;
     }
+
+    // Update display
+    currentNoteEl.textContent = `${noteInfo.note} (${pitch.toFixed(1)} Hz)`;
+    updateDeviationBar(noteInfo.deviation);
 
     if (Math.abs(noteInfo.deviation) <= tolerance) {
         processValidPitch(noteInfo, now);
-        currentNoteEl.textContent = candidateNote;
-        updateDeviationBar(noteInfo.deviation);
     } else {
-        currentNoteEl.textContent = "No pitch within tolerance";
-        deviationMarkerEl.innerHTML = "";
-        candidateNote = null;
-        candidateStartTime = 0;
-        candidateCount = 0;
+        // If deviation is too high, treat as no valid pitch
+        processNoPitch(now);
     }
 }
 
@@ -359,19 +261,36 @@ function noteToMidiNumber(noteName) {
     return noteIndex + 12 * (octave + 1) + 12;
 }
 
-// Refactored processAudio using the new helper functions.
+// Modified processAudio for better audio handling
 function processAudio() {
     const now = performance.now();
-    const buffer = getAudioBuffer();
-    drawWaveform(buffer);
-    const pitch = autoCorrelate(buffer, audioContext.sampleRate);
     
-    if (pitch !== -1) {
+    // Get audio data
+    const buffer = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buffer);
+    
+    // Visualize waveform
+    drawWaveform(buffer);
+
+    // Get frequency data for FFT
+    const frequencyData = new Float32Array(analyser.frequencyBinCount);
+    analyser.getFloatFrequencyData(frequencyData);
+    
+    // Normalize frequency data (convert from dB to linear scale)
+    for (let i = 0; i < frequencyData.length; i++) {
+        frequencyData[i] = Math.pow(10, frequencyData[i] / 20);
+    }
+
+    // Use FrequencyAnalyzer with both time and frequency domain data
+    const pitch = frequencyAnalyzer.analyzePitch(buffer, audioContext.sampleRate, frequencyData);
+
+    // Process the detected pitch
+    if (pitch !== null && !isNaN(pitch) && pitch > 0) {
         processDetectedPitch(pitch, now);
     } else {
         processNoPitch(now);
     }
-    
+
     if (recording) {
         requestAnimationFrame(processAudio);
     }
@@ -558,19 +477,48 @@ function updateMelodyList() {
         header.textContent = `Melody ${index + 1} | BPM: ${mel.bpm} | Duration: ${mel.totalDuration?.toFixed(2)}s | Saved on: ${savedDate.toLocaleString()}`;
         li.appendChild(header);
         li.appendChild(buildGridView(mel.notes, mel.bpm));
-        let downloadBtn = document.createElement('button');
-        downloadBtn.textContent = "Download";
-        downloadBtn.style.marginLeft = "10px";
-        downloadBtn.addEventListener('click', function(){
-            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(mel, null, 2));
-            let a = document.createElement('a');
-            a.setAttribute("href", dataStr);
-            a.setAttribute("download", `melody_${index + 1}.json`);
-            a.click();
-        });
-        li.appendChild(downloadBtn);
+        
+        // Add buttons container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.marginTop = '10px';
+        
+        // JSON download button
+        let jsonBtn = document.createElement('button');
+        jsonBtn.textContent = "Download JSON";
+        jsonBtn.style.marginRight = "10px";
+        jsonBtn.addEventListener('click', () => downloadJSON(mel, index));
+        
+        // MIDI download button
+        let midiBtn = document.createElement('button');
+        midiBtn.textContent = "Download MIDI";
+        midiBtn.addEventListener('click', () => downloadMIDI(mel, index));
+        
+        buttonContainer.appendChild(jsonBtn);
+        buttonContainer.appendChild(midiBtn);
+        li.appendChild(buttonContainer);
+        
         melodyListEl.appendChild(li);
     });
+}
+
+// Split download functionality into separate functions
+function downloadJSON(melody, index) {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(melody, null, 2));
+    const a = document.createElement('a');
+    a.setAttribute("href", dataStr);
+    a.setAttribute("download", `melody_${index + 1}.json`);
+    a.click();
+}
+
+function downloadMIDI(melody, index) {
+    const midiData = MidiUtils.melodyToMidi(melody.notes, melody.bpm);
+    const blob = new Blob([midiData], { type: 'audio/midi' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `melody_${index + 1}.mid`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 // Add "Clear Stored Melodies" button functionality
