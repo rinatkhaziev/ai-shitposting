@@ -100,6 +100,15 @@ async function initAudio() {
 // New global variable to track pause start time
 let pauseStartTime = null;
 
+// Add these timing-related constants near the top
+const TICKS_PER_QUARTER = 480; // Standard MIDI resolution
+const QUANTIZE_GRID = 16; // 16th note grid
+const TICKS_PER_GRID = TICKS_PER_QUARTER / (QUANTIZE_GRID / 4);
+
+// Add beat tracking variables
+let beatStartTime = null;
+let currentBeat = 0;
+
 // New helper: Process a valid pitch detection.
 function processDetectedPitch(pitch, now) {
     const noteInfo = frequencyToNoteInfo(pitch);
@@ -124,13 +133,22 @@ function processDetectedPitch(pitch, now) {
 // Updated helper: Process when no pitch is detected.
 function processNoPitch(now) {
     if (lastEventTime && !pauseStartTime) {
-        // Start of a pause
         if (lastDetectedNote !== null) {
-            const noteDuration = (now - lastNoteStartTime) / 1000;
-            if (noteDuration >= noteDetector.minDuration) {
+            const rawDuration = (now - lastNoteStartTime) / 1000;
+            if (rawDuration >= noteDetector.minDuration) {
+                const beatDuration = 60 / BPM;
+                const startBeat = (lastNoteStartTime - beatStartTime) / 1000 / beatDuration;
+                const endBeat = (now - beatStartTime) / 1000 / beatDuration;
+                
+                const quantizedStart = Math.round(startBeat * QUANTIZE_GRID / 4) * (4 / QUANTIZE_GRID);
+                const quantizedEnd = Math.round(endBeat * QUANTIZE_GRID / 4) * (4 / QUANTIZE_GRID);
+                
                 melody.push({
                     note: lastDetectedNote,
-                    duration: noteDuration,
+                    rawDuration: rawDuration,
+                    duration: (quantizedEnd - quantizedStart) * beatDuration,
+                    quantizedStart: quantizedStart,
+                    quantizedEnd: quantizedEnd,
                     timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
                     frequency: lastDetectedFrequency
                 });
@@ -149,32 +167,39 @@ function processNoPitch(now) {
 function processValidPitch(noteInfo, now) {
     if (!recordingStartTime) {
         recordingStartTime = now;
+        beatStartTime = now;
     }
 
     const detectedNote = noteDetector.addFrequency(noteInfo.frequency, now);
-    
-    if (!detectedNote) {
-        return;
-    }
+    if (!detectedNote) return;
 
-    if (lastDetectedNote === null) {
-        // Start of a new note
-        lastDetectedNote = noteInfo.note;
-        lastDetectedFrequency = noteInfo.frequency;
-        lastNoteStartTime = now;
-        pauseStartTime = null;
-    } else if (lastDetectedNote !== noteInfo.note) {
-        // Note change detected
-        const noteDuration = (now - lastNoteStartTime) / 1000;
-        
-        // Only add note if it lasted longer than minDuration
-        if (noteDuration >= noteDetector.minDuration) {
-            melody.push({
-                note: lastDetectedNote,
-                duration: noteDuration,
-                timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
-                frequency: lastDetectedFrequency
-            });
+    // Calculate beat position
+    const elapsedTime = (now - beatStartTime) / 1000; // seconds
+    const beatDuration = 60 / BPM; // seconds per beat
+    const currentBeatPosition = elapsedTime / beatDuration;
+    
+    // Quantize to grid
+    const gridPosition = Math.round(currentBeatPosition * QUANTIZE_GRID / 4) * (4 / QUANTIZE_GRID);
+
+    if (lastDetectedNote === null || lastDetectedNote !== noteInfo.note) {
+        if (lastDetectedNote !== null) {
+            // End previous note
+            const rawDuration = (now - lastNoteStartTime) / 1000;
+            if (rawDuration >= noteDetector.minDuration) {
+                const startBeat = (lastNoteStartTime - beatStartTime) / 1000 / beatDuration;
+                const quantizedStart = Math.round(startBeat * QUANTIZE_GRID / 4) * (4 / QUANTIZE_GRID);
+                const quantizedDuration = gridPosition - quantizedStart;
+                
+                melody.push({
+                    note: lastDetectedNote,
+                    rawDuration: rawDuration,
+                    duration: quantizedDuration * beatDuration, // Convert back to seconds
+                    quantizedStart: quantizedStart,
+                    quantizedEnd: gridPosition,
+                    timestamp: (lastNoteStartTime - recordingStartTime) / 1000,
+                    frequency: lastDetectedFrequency
+                });
+            }
         }
         
         lastDetectedNote = noteInfo.note;

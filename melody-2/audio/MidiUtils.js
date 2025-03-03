@@ -2,6 +2,8 @@
  * MidiUtils - Utility class for MIDI file creation
  */
 class MidiUtils {
+    // Add static constants at the top of the class
+    static TICKS_PER_QUARTER = 480; // Standard MIDI resolution
 
     /**
      * Convert note name to MIDI note number
@@ -32,117 +34,120 @@ class MidiUtils {
      * @return {Uint8Array} MIDI file data
      */
     static melodyToMidi(melody, bpm = 120) {
-        // Constants for MIDI file format
-        const HEADER_CHUNK_ID = [0x4D, 0x54, 0x68, 0x64];  // "MThd"
-        const HEADER_CHUNK_SIZE = [0x00, 0x00, 0x00, 0x06]; // Header size (6 bytes)
-        const FORMAT_TYPE = [0x00, 0x00]; // Format 0 (single track)
-        const NUMBER_OF_TRACKS = [0x00, 0x01]; // One track
-        const TIME_DIVISION = [0x01, 0xE0]; // 480 ticks per quarter note
+        // MIDI file constants
+        const FORMAT_TYPE = 0;      // Single track format
+        const TRACK_COUNT = 1;      // One track
+        const DEFAULT_VELOCITY = 80; // Medium velocity for notes
         
-        const TRACK_CHUNK_ID = [0x4D, 0x54, 0x72, 0x6B]; // "MTrk"
-        // Track chunk size (placeholder, will be filled later)
-        const TRACK_CHUNK_SIZE = [0x00, 0x00, 0x00, 0x00];
+        // Calculate microseconds per quarter note from BPM
+        const microsecondsPerQuarter = Math.round(60000000 / bpm);
         
-        // Calculate tempo in microseconds per quarter note
-        const tempoMicroseconds = Math.round(60000000 / bpm);
-        const setTempo = [
-            0x00, // Delta time
-            0xFF, // Meta event
-            0x51, // Tempo
-            0x03, // Length
-            // Tempo value (3 bytes)
-            (tempoMicroseconds >> 16) & 0xFF,
-            (tempoMicroseconds >> 8) & 0xFF,
-            tempoMicroseconds & 0xFF
+        // Create header chunk
+        const headerChunk = [
+            0x4D, 0x54, 0x68, 0x64,  // MThd
+            0x00, 0x00, 0x00, 0x06,  // Chunk length (always 6 for header)
+            0x00, FORMAT_TYPE,       // Format type (0)
+            0x00, TRACK_COUNT,       // Number of tracks (1)
+            (this.TICKS_PER_QUARTER >> 8) & 0xFF, this.TICKS_PER_QUARTER & 0xFF  // Time division (ticks per quarter note)
         ];
         
-        // Set up MIDI channel and instrument
-        const setInstrument = [
-            0x00, // Delta time
-            0xC0, // Program change
-            0x00  // Instrument (0 = Acoustic Grand Piano)
-        ];
+        // Start building track events
+        const trackEvents = [];
         
-        // End of track marker
-        const endOfTrack = [0x00, 0xFF, 0x2F, 0x00];
-        
-        // Build track events
-        let trackEvents = [];
-        trackEvents = trackEvents.concat(setTempo, setInstrument);
-        
-        let currentTime = 0; // Current time in ticks
-        const TICKS_PER_QUARTER = 480;
-        
-        melody.forEach(note => {
-            const midiNote = this.noteToMidi(note.note);
-            
-            // Skip invalid notes
-            if (midiNote === -1 && note.note !== "Pause") return;
-            
-            // Calculate note duration in ticks
-            // Quarter note = 480 ticks at the defined BPM
-            const durationInBeats = note.duration / (60 / bpm);
-            const durationInTicks = Math.round(durationInBeats * TICKS_PER_QUARTER);
-            
-            // For valid notes, add Note On and Note Off events
-            if (midiNote !== -1) {
-                // Note On event
-                const noteOnEvent = [
-                    0x00, // Delta time (will be encoded)
-                    0x90, // Note On, channel 0
-                    midiNote, // Note number
-                    0x64 // Velocity (100 - medium loud)
-                ];
-                
-                // Note Off event
-                const noteOffEvent = [
-                    0x00, // Delta time (will be encoded)
-                    0x80, // Note Off, channel 0
-                    midiNote, // Note number
-                    0x00 // Velocity (0)
-                ];
-                
-                // Set delta time for Note On (could be after a pause)
-                noteOnEvent[0] = this.encodeVariableLengthQuantity(currentTime);
-                trackEvents = trackEvents.concat(noteOnEvent);
-                
-                // Set next time point
-                currentTime = durationInTicks;
-                
-                // Set delta time for Note Off (time since Note On)
-                noteOffEvent[0] = this.encodeVariableLengthQuantity(currentTime);
-                trackEvents = trackEvents.concat(noteOffEvent);
-                
-                // Reset current time since we've used it
-                currentTime = 0;
-            } else {
-                // For pauses, just accumulate time
-                currentTime += durationInTicks;
-            }
+        // Add tempo meta event
+        trackEvents.push({
+            deltaTime: 0,
+            eventData: [
+                0xFF, 0x51, 0x03,  // Tempo meta event
+                (microsecondsPerQuarter >> 16) & 0xFF,
+                (microsecondsPerQuarter >> 8) & 0xFF,
+                microsecondsPerQuarter & 0xFF
+            ]
         });
         
-        // Add end of track marker
-        trackEvents = trackEvents.concat(endOfTrack);
+        // Add instrument program change (GM Acoustic Grand Piano)
+        trackEvents.push({
+            deltaTime: 0,
+            eventData: [0xC0, 0x00]  // Program change to instrument 0 (piano)
+        });
         
-        // Calculate track chunk size
-        const trackLength = trackEvents.length;
-        TRACK_CHUNK_SIZE[3] = trackLength & 0xFF;
-        TRACK_CHUNK_SIZE[2] = (trackLength >> 8) & 0xFF;
-        TRACK_CHUNK_SIZE[1] = (trackLength >> 16) & 0xFF;
-        TRACK_CHUNK_SIZE[0] = (trackLength >> 24) & 0xFF;
+        // Process each note in the melody
+        let currentTick = 0;
+        let allEvents = [];
         
-        // Combine all chunks
-        const midiData = HEADER_CHUNK_ID.concat(
-            HEADER_CHUNK_SIZE,
-            FORMAT_TYPE,
-            NUMBER_OF_TRACKS,
-            TIME_DIVISION,
-            TRACK_CHUNK_ID,
-            TRACK_CHUNK_SIZE,
-            trackEvents
-        );
+        melody.forEach(noteObj => {
+            // Convert duration from seconds to ticks
+            const durationInTicks = Math.round(noteObj.duration * (bpm / 60) * this.TICKS_PER_QUARTER);
+            
+            if (noteObj.note !== "Pause") {
+                // Convert note name to MIDI note number
+                const midiNote = this.noteToMidi(noteObj.note);
+                if (midiNote >= 0) {  // Skip invalid notes
+                    // Add note-on event
+                    allEvents.push({
+                        tick: currentTick,
+                        eventData: [0x90, midiNote, DEFAULT_VELOCITY]  // Note on, channel 0
+                    });
+                    
+                    // Add note-off event
+                    allEvents.push({
+                        tick: currentTick + durationInTicks,
+                        eventData: [0x80, midiNote, 0x00]  // Note off, channel 0
+                    });
+                }
+            }
+            
+            // Move time forward
+            currentTick += durationInTicks;
+        });
         
-        return new Uint8Array(midiData);
+        // Sort all events by tick
+        allEvents.sort((a, b) => a.tick - b.tick);
+        
+        // Convert absolute ticks to delta times
+        let lastTick = 0;
+        allEvents.forEach(event => {
+            const deltaTime = event.tick - lastTick;
+            event.deltaTime = deltaTime;
+            lastTick = event.tick;
+            
+            // Add to track events
+            trackEvents.push({
+                deltaTime: event.deltaTime,
+                eventData: event.eventData
+            });
+        });
+        
+        // Add end of track meta event
+        trackEvents.push({
+            deltaTime: 0,
+            eventData: [0xFF, 0x2F, 0x00]  // End of track
+        });
+        
+        // Convert track events to bytes
+        const trackData = [];
+        trackEvents.forEach(event => {
+            const deltaTimeBytes = this.encodeVariableLengthQuantity(event.deltaTime);
+            trackData.push(...deltaTimeBytes, ...event.eventData);
+        });
+        
+        // Create track chunk header
+        const trackChunkHeader = [
+            0x4D, 0x54, 0x72, 0x6B,  // MTrk
+            (trackData.length >> 24) & 0xFF,
+            (trackData.length >> 16) & 0xFF,
+            (trackData.length >> 8) & 0xFF,
+            trackData.length & 0xFF
+        ];
+        
+        // Combine everything into a single array
+        const midiData = new Uint8Array([
+            ...headerChunk,
+            ...trackChunkHeader,
+            ...trackData
+        ]);
+        
+        return midiData;
     }
     
     /**
