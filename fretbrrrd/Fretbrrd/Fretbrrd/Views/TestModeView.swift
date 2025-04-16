@@ -61,7 +61,7 @@ public struct TestModeView: View {
                 }
             }
             .padding()
-            .background(Color(.systemBackground))
+            .background(Color(NSColor.windowBackgroundColor))
             .cornerRadius(10)
             .shadow(radius: 2)
             .padding(.horizontal)
@@ -114,7 +114,7 @@ public struct TestModeView: View {
                     .padding()
                 }
                 .frame(height: 150)
-                .background(Color(.systemGray6))
+                .background(Color.gray.opacity(0.15))
             }
         }
         .navigationTitle("Test Mode")
@@ -156,7 +156,7 @@ struct TestButton: View {
             }
             .frame(width: 200, alignment: .leading)
             .padding()
-            .background(isSelected ? Color.blue.opacity(0.2) : Color(.systemBackground))
+            .background(isSelected ? Color.blue.opacity(0.2) : Color(NSColor.windowBackgroundColor))
             .cornerRadius(10)
             .shadow(radius: isSelected ? 3 : 1)
             .animation(.easeInOut, value: isSelected)

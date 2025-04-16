@@ -18,16 +18,16 @@ public class UserSettings: ObservableObject {
     @Published public var testTimeLimit: Int = 60 // seconds
     @Published public var testDifficulty: TestDifficulty = .medium
     
-    public enum AppTheme: String, CaseIterable {
-        case light = "light"
-        case dark = "dark"
-        case system = "system"
-    }
-    
     public enum TestDifficulty: String, CaseIterable {
         case easy = "easy"
         case medium = "medium"
         case hard = "hard"
+    }
+    
+    public enum AppTheme: String, CaseIterable {
+        case light = "light"
+        case dark = "dark"
+        case system = "system"
     }
     
     public init() {}

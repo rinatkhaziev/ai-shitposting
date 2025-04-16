@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+
 
 // Constants for fretboard layout
 private enum FretboardLayout {
@@ -47,7 +49,7 @@ public struct FretboardView: View {
             ZStack {
                 // Fretboard background
                 Rectangle()
-                    .fill(Color(.systemGray6))
+                    .fill(Color.gray.opacity(0.15))
                 
                 // Strings
                 ForEach(0..<FretboardLayout.stringCount, id: \.self) { stringIndex in

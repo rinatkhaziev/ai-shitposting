@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 public struct LearningModeView: View {
     @EnvironmentObject var settings: UserSettings
@@ -46,7 +47,7 @@ public struct LearningModeView: View {
                         .foregroundColor(.secondary)
                 }
                 .padding()
-                .background(Color(.systemBackground))
+                .background(Color(NSColor.windowBackgroundColor))
                 .cornerRadius(10)
                 .shadow(radius: 2)
                 .padding(.horizontal)
@@ -107,7 +108,7 @@ public struct LearningModeView: View {
                 .padding()
             }
             .frame(height: 150)
-            .background(Color(.systemGray6))
+            .background(Color.gray.opacity(0.15))
         }
         .navigationTitle("Learning Mode")
         .onAppear {
@@ -155,7 +156,7 @@ struct LessonButton: View {
             }
             .frame(width: 200, alignment: .leading)
             .padding()
-            .background(isSelected ? Color.blue.opacity(0.2) : Color(.systemBackground))
+            .background(isSelected ? Color.blue.opacity(0.2) : Color.white)
             .cornerRadius(10)
             .shadow(radius: isSelected ? 3 : 1)
             .animation(.easeInOut, value: isSelected)

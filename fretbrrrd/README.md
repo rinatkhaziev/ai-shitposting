@@ -15,15 +15,27 @@ A cross-platform guitar learning app built with SwiftUI that helps users memoriz
 
 ```
 Fretbrrd/
-├── Models/
-│   ├── Note.swift
-│   └── UserSettings.swift
-├── Views/
-│   ├── FretboardView.swift
-│   ├── LearningModeView.swift
-│   ├── TestModeView.swift
-│   └── SettingsView.swift
-└── FretbrrdApp.swift
+├── Fretbrrd/
+│   ├── Models/
+│   │   ├── Note.swift
+│   │   ├── UserSettings.swift
+│   │   ├── UserProgress.swift
+│   │   ├── FretboardViewModel.swift
+│   │   ├── TestViewModel.swift
+│   │   ├── LearningViewModel.swift
+│   │   ├── AppTheme.swift
+│   │   └── TestDifficulty.swift
+│   ├── Views/
+│   │   ├── FretboardView.swift
+│   │   ├── LearningModeView.swift
+│   │   ├── TestModeView.swift
+│   │   └── SettingsView.swift
+│   ├── ContentView.swift
+│   ├── FretbrrdApp.swift
+│   ├── Persistence.swift
+│   └── Assets.xcassets/
+├── FretbrrdTests/
+└── FretbrrdUITests/
 ```
 
 ## Requirements
@@ -48,7 +60,7 @@ The app follows the MVVM (Model-View-ViewModel) architecture pattern:
 
 - **Models**: Core data structures and business logic
 - **Views**: SwiftUI views for the user interface
-- **ViewModels**: State management and business logic for views
+- **ViewModels**: State management and business logic for views (located in the Models directory)
 
 ## Contributing
 
