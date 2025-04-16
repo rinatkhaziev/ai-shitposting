@@ -8,6 +8,7 @@ public class FretboardViewModel: ObservableObject {
     @Published public var selectedNote: Note?
     @Published public var highlightedNotes: Set<Note> = []
     @Published public var visibleFrets: ClosedRange<Int> = 0...12  // Default visible fret range
+    @Published public var showOnlyNaturalNotes: Bool = false  // Whether to show only natural notes
     
     // Computed properties for fret display
     public var visibleFretCount: Int {
@@ -28,16 +29,27 @@ public class FretboardViewModel: ObservableObject {
     public init(userSettings: UserSettings, userProgress: UserProgress) {
         self.userSettings = userSettings
         self.userProgress = userProgress
+        self.showOnlyNaturalNotes = userSettings.showOnlyNaturalNotes
         
         setupSubscriptions()
     }
     
     private func setupSubscriptions() {
-        // Example: Respond to changes in user settings
+        // Respond to changes in user settings
         userSettings.$isLeftHanded
             .sink { [weak self] _ in
                 // Perform any necessary updates when handedness changes
                 self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+            
+        // Respond to changes in the natural notes preference
+        userSettings.$showOnlyNaturalNotes
+            .sink { [weak self] showNatural in
+                guard let self = self else { return }
+                self.showOnlyNaturalNotes = showNatural
+                // Force view refresh when the setting changes
+                self.objectWillChange.send()
             }
             .store(in: &cancellables)
     }
@@ -65,6 +77,14 @@ public class FretboardViewModel: ObservableObject {
         visibleFrets = range
     }
     
+    /// Toggle display of only natural notes
+    public func toggleOnlyNaturalNotes() {
+        showOnlyNaturalNotes.toggle()
+        userSettings.showOnlyNaturalNotes = showOnlyNaturalNotes
+        // Force view refresh
+        objectWillChange.send()
+    }
+    
     // MARK: - Helper Methods
     
     /// Highlight all notes with the same pitch class
@@ -74,10 +94,17 @@ public class FretboardViewModel: ObservableObject {
     
     /// Get all notes currently visible on the fretboard
     public func visibleNotes() -> [Note] {
-        return Note.allNotes.filter { 
+        let notes = Note.allNotes.filter { 
             visibleFrets.lowerBound <= $0.fretNumber && 
             visibleFrets.upperBound >= $0.fretNumber
         }
+        
+        // If we're only showing natural notes, apply that filter
+        if showOnlyNaturalNotes {
+            return notes.filter { $0.isNatural }
+        }
+        
+        return notes
     }
     
     /// Check if a note should be visually highlighted

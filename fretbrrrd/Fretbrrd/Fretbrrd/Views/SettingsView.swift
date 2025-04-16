@@ -12,6 +12,11 @@ public struct SettingsView: View {
                 Toggle("Left-handed Mode", isOn: $settings.isLeftHanded)
                 Toggle("Show Note Names", isOn: $settings.showNoteNames)
                 Toggle("Show Intervals", isOn: $settings.showIntervals)
+                Toggle("Show Only Natural Notes", isOn: $settings.showOnlyNaturalNotes)
+                    .onChange(of: settings.showOnlyNaturalNotes) { _ in
+                        // Force the settings object to notify observers
+                        settings.objectWillChange.send()
+                    }
             }
             
             Section(header: Text("Sound Settings")) {

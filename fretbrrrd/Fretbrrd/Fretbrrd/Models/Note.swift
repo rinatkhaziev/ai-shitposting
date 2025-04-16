@@ -23,6 +23,11 @@ public struct Note: Identifiable, Hashable {
         return Note.intervalNames[pitchClass]
     }
     
+    /// Returns true if the note is a natural note (no sharps or flats)
+    public var isNatural: Bool {
+        return !name.contains("#") && !name.contains("b")
+    }
+    
     /// Computed property that returns all notes on the fretboard (standard tuning)
     public static var allNotes: [Note] {
         var notes = [Note]()

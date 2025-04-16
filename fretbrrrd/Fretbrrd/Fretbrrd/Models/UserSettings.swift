@@ -6,6 +6,7 @@ public class UserSettings: ObservableObject {
     @Published public var isLeftHanded: Bool = false
     @Published public var showNoteNames: Bool = true
     @Published public var showIntervals: Bool = false
+    @Published public var showOnlyNaturalNotes: Bool = false
     @Published public var soundEnabled: Bool = true
     @Published public var theme: AppTheme = .system
     
@@ -18,11 +19,15 @@ public class UserSettings: ObservableObject {
     @Published public var testDifficulty: TestDifficulty = .medium
     
     public enum AppTheme: String, CaseIterable {
-        case light, dark, system
+        case light = "light"
+        case dark = "dark"
+        case system = "system"
     }
     
     public enum TestDifficulty: String, CaseIterable {
-        case easy, medium, hard
+        case easy = "easy"
+        case medium = "medium"
+        case hard = "hard"
     }
     
     public init() {}

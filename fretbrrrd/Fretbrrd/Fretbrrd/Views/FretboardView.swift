@@ -110,7 +110,7 @@ public struct FretboardView: View {
                             // Note circle
                             Circle()
                                 .fill(viewModel.colorForNote(note, isSelected: isSelected))
-                                .frame(width: min(stringSpacing, fretWidth) * 0.8)
+                                .frame(width: min(stringSpacing, fretWidth) * 0.6)
                             
                             // Note name label
                             if effectiveShowNoteNames || isSelected {
