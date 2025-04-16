@@ -105,7 +105,7 @@ public struct NoteStats: Codable {
 
 /// Represents the result of a completed test
 public struct TestResult: Identifiable, Codable {
-    public let id = UUID()
+    public var id = UUID()
     public let timestamp: Date
     public let testType: String
     public let score: Int
