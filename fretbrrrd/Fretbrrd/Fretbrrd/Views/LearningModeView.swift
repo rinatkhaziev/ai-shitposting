@@ -156,7 +156,7 @@ struct LessonButton: View {
             }
             .frame(width: 200, alignment: .leading)
             .padding()
-            .background(isSelected ? Color.blue.opacity(0.2) : Color.white)
+            .background(isSelected ? Color.blue.opacity(0.2) : Color(.lightGray).opacity(0.2))
             .cornerRadius(10)
             .shadow(radius: isSelected ? 3 : 1)
             .animation(.easeInOut, value: isSelected)
