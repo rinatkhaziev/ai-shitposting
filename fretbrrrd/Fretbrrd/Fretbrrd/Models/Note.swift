@@ -9,8 +9,8 @@ public struct Note: Identifiable, Hashable {
     public let fretNumber: Int
     public let pitchClass: Int // 0-11 representing C through B
     
-    /// Standard tuning notes (EADGBE)
-    public static let standardTuning = ["E", "A", "D", "G", "B", "E"]
+    /// Standard tuning notes (EBGDAE)
+    public static let standardTuning = ["E", "B", "G", "D", "A", "E"]
     
     /// All possible note names
     public static let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
