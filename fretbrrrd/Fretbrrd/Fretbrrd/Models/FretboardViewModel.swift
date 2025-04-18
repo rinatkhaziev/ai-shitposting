@@ -45,11 +45,15 @@ public class FretboardViewModel: ObservableObject {
             
         // Respond to changes in the natural notes preference
         userSettings.$showOnlyNaturalNotes
+            .removeDuplicates() // Only respond to actual changes
             .sink { [weak self] showNatural in
                 guard let self = self else { return }
-                self.showOnlyNaturalNotes = showNatural
-                // Force view refresh when the setting changes
-                self.objectWillChange.send()
+                // This is critical - update our local state from UserSettings
+                if self.showOnlyNaturalNotes != showNatural {
+                    self.showOnlyNaturalNotes = showNatural
+                    // Force view refresh when the setting changes
+                    self.objectWillChange.send()
+                }
             }
             .store(in: &cancellables)
     }
@@ -80,6 +84,7 @@ public class FretboardViewModel: ObservableObject {
     /// Toggle display of only natural notes
     public func toggleOnlyNaturalNotes() {
         showOnlyNaturalNotes.toggle()
+        // Update UserSettings (will sync to UserDefaults via didSet)
         userSettings.showOnlyNaturalNotes = showOnlyNaturalNotes
         // Force view refresh
         objectWillChange.send()

@@ -4,6 +4,9 @@ public struct SettingsView: View {
     @EnvironmentObject var settings: UserSettings
     @EnvironmentObject var progress: UserProgress
     
+    // Import the TestDifficulty enum from UserSettings
+    typealias TestDifficulty = UserSettings.TestDifficulty
+    
     public init() {}
     
     public var body: some View {
@@ -13,9 +16,9 @@ public struct SettingsView: View {
                 Toggle("Show Note Names", isOn: $settings.showNoteNames)
                 Toggle("Show Intervals", isOn: $settings.showIntervals)
                 Toggle("Show Only Natural Notes", isOn: $settings.showOnlyNaturalNotes)
-                    .onChange(of: settings.showOnlyNaturalNotes) { _ in
-                        // Force the settings object to notify observers
-                        settings.objectWillChange.send()
+                    .onChange(of: settings.showOnlyNaturalNotes) { oldValue, newValue in
+                        // The onChange handler is required for macOS 14+ compatibility
+                        // UserDefaults persistence is handled in the UserSettings didSet
                     }
             }
             
@@ -23,18 +26,9 @@ public struct SettingsView: View {
                 Toggle("Enable Sound", isOn: $settings.soundEnabled)
             }
             
-            Section(header: Text("Theme")) {
-                Picker("Theme", selection: $settings.theme) {
-                    ForEach(AppTheme.allCases, id: \.self) { theme in
-                        Text(theme.rawValue.capitalized)
-                            .tag(theme)
-                    }
-                }
-            }
-            
             Section(header: Text("Test Settings")) {
                 Picker("Difficulty", selection: $settings.testDifficulty) {
-                    ForEach(TestDifficulty.allCases, id: \.self) { difficulty in
+                    ForEach(UserSettings.TestDifficulty.allCases, id: \.self) { difficulty in
                         Text(difficulty.rawValue.capitalized)
                             .tag(difficulty)
                     }
@@ -92,13 +86,29 @@ public struct SettingsView: View {
             
             Section {
                 Button("Reset All Progress") {
-                    // Show confirmation dialog
-                    // TODO: Implement reset functionality
+                    showResetConfirmation = true
                 }
                 .foregroundColor(.red)
+                .alert(isPresented: $showResetConfirmation) {
+                    Alert(
+                        title: Text("Reset Progress"),
+                        message: Text("Are you sure you want to reset all progress? This cannot be undone."),
+                        primaryButton: .destructive(Text("Reset")) {
+                            resetAllData()
+                        },
+                        secondaryButton: .cancel()
+                    )
+                }
             }
         }
         .navigationTitle("Settings")
+    }
+    
+    @State private var showResetConfirmation = false
+    
+    private func resetAllData() {
+        progress.resetAllProgress()
+        settings.resetAllSettings()
     }
     
     private func progressColor(for accuracy: Double) -> Color {

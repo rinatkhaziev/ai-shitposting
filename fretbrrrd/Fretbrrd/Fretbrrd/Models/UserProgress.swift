@@ -1,18 +1,61 @@
 import Foundation
 import Combine
 
+/// Keys for UserDefaults
+private enum ProgressDefaultsKeys {
+    static let noteAccuracy = "progressNoteAccuracy"
+    static let testHistory = "progressTestHistory"
+    static let completedLessons = "progressCompletedLessons"
+}
+
 /// Tracks a user's progress in the app
 public class UserProgress: ObservableObject {
+    // UserDefaults for persistence
+    private let defaults = UserDefaults.standard
+    
     // Note accuracy tracking
-    @Published public var noteAccuracy: [String: NoteStats] = [:]
+    @Published public var noteAccuracy: [String: NoteStats] {
+        didSet {
+            saveNoteAccuracy()
+        }
+    }
     
     // Test history
-    @Published public var testHistory: [TestResult] = []
+    @Published public var testHistory: [TestResult] {
+        didSet {
+            saveTestHistory()
+        }
+    }
     
     // Completed lessons
-    @Published public var completedLessons: Set<String> = []
+    @Published public var completedLessons: Set<String> {
+        didSet {
+            defaults.set(Array(completedLessons), forKey: ProgressDefaultsKeys.completedLessons)
+        }
+    }
     
-    public init() {}
+    public init() {
+        // Initialize with values from UserDefaults
+        if let data = defaults.data(forKey: ProgressDefaultsKeys.noteAccuracy),
+           let decoded = try? JSONDecoder().decode([String: NoteStats].self, from: data) {
+            self.noteAccuracy = decoded
+        } else {
+            self.noteAccuracy = [:]
+        }
+        
+        if let data = defaults.data(forKey: ProgressDefaultsKeys.testHistory),
+           let decoded = try? JSONDecoder().decode([TestResult].self, from: data) {
+            self.testHistory = decoded
+        } else {
+            self.testHistory = []
+        }
+        
+        if let lessonsArray = defaults.stringArray(forKey: ProgressDefaultsKeys.completedLessons) {
+            self.completedLessons = Set(lessonsArray)
+        } else {
+            self.completedLessons = []
+        }
+    }
     
     // MARK: - Note Progress Tracking
     
@@ -79,14 +122,32 @@ public class UserProgress: ObservableObject {
     
     // MARK: - Persistence
     
-    /// Saves progress to UserDefaults
-    public func save() {
-        // TODO: Implement persistence using UserDefaults or CoreData
+    private func saveNoteAccuracy() {
+        if let encoded = try? JSONEncoder().encode(noteAccuracy) {
+            defaults.set(encoded, forKey: ProgressDefaultsKeys.noteAccuracy)
+        }
     }
     
-    /// Loads progress from UserDefaults
-    public func load() {
-        // TODO: Implement loading from persistence
+    private func saveTestHistory() {
+        if let encoded = try? JSONEncoder().encode(testHistory) {
+            defaults.set(encoded, forKey: ProgressDefaultsKeys.testHistory)
+        }
+    }
+    
+    /// Saves all progress to UserDefaults
+    public func save() {
+        saveNoteAccuracy()
+        saveTestHistory()
+        defaults.set(Array(completedLessons), forKey: ProgressDefaultsKeys.completedLessons)
+        defaults.synchronize()
+    }
+    
+    /// Resets all progress
+    public func resetAllProgress() {
+        noteAccuracy = [:]
+        testHistory = []
+        completedLessons = []
+        save()
     }
 }
 

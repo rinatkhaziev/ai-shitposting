@@ -168,6 +168,8 @@ public struct FretboardView: View {
             .buttonStyle(PlainButtonStyle())
             .padding(8)
         }
+        // Force the view to redraw when key properties change
+        .id("\(effectiveLeftHanded)-\(viewModel.showOnlyNaturalNotes)")
     }
 }
 
