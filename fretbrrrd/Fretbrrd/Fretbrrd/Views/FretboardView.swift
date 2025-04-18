@@ -63,7 +63,9 @@ public struct FretboardView: View {
                     
                     // Frets
                     ForEach(Array(viewModel.visibleFretArray.enumerated()), id: \.element) { index, fretNumber in
-                        let x = CGFloat(index) * fretWidth
+                        let x = effectiveLeftHanded ? 
+                            fretboardWidth - CGFloat(index) * fretWidth - fretWidth :
+                            CGFloat(index) * fretWidth
                         Rectangle()
                             .fill(Color.gray)
                             .frame(width: 2, height: fretboardHeight)
@@ -74,7 +76,9 @@ public struct FretboardView: View {
                     ForEach([3, 5, 7, 9, 12, 15, 17, 19, 21, 24], id: \.self) { fretNumber in
                         if viewModel.visibleFrets.lowerBound <= fretNumber && viewModel.visibleFrets.upperBound >= fretNumber {
                             let fretPosition = fretNumber - viewModel.visibleFrets.lowerBound
-                            let x = (CGFloat(fretPosition) + 0.5) * fretWidth
+                            let x = effectiveLeftHanded ?
+                                fretboardWidth - (CGFloat(fretPosition) + 0.5) * fretWidth :
+                                (CGFloat(fretPosition) + 0.5) * fretWidth
                             
                             if fretNumber == 12 || fretNumber == 24 {
                                 // Double dot for 12th and 24th fret
@@ -101,7 +105,13 @@ public struct FretboardView: View {
                     ForEach(viewModel.visibleNotes()) { note in
                         if viewModel.visibleFrets.lowerBound <= note.fretNumber && viewModel.visibleFrets.upperBound >= note.fretNumber {
                             let fretPosition = note.fretNumber - viewModel.visibleFrets.lowerBound
-                            let noteX = (CGFloat(fretPosition) + 0.5) * fretWidth
+                            
+                            // Adjust X position for left-handed mode
+                            let noteX = effectiveLeftHanded ?
+                                fretboardWidth - (CGFloat(fretPosition) + 0.5) * fretWidth :
+                                (CGFloat(fretPosition) + 0.5) * fretWidth
+                            
+                            // Y position remains the same regardless of mode
                             let noteY = CGFloat(note.stringNumber - 1) * stringSpacing
                             
                             let isSelected = viewModel.selectedNote?.stringNumber == note.stringNumber && 
@@ -140,7 +150,6 @@ public struct FretboardView: View {
                         }
                     }
                 }
-                .rotationEffect(.degrees(effectiveLeftHanded ? 180 : 0))
             }
             
             // Toggle button for natural notes display
