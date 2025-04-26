@@ -26,6 +26,7 @@ To document the amusing journey of AI tools trying to replace programmers while 
 |---------|-------------|--------------|
 | [melody-1](/melody-1/) | First attempt at a melody detection app (the AI's musical debut) | Sonnet 3.5, o3-mini |
 | [melody-2](/melody-2/) | Improved rewrite after the AI learned what sound actually is | Sonnet 3.5, 3.7 |
+| [fretbrrd](/fretbrrd/) | A Swift app (x-platform) for learning guitar fretboard.  | Cursor/Sonnet 3.7 |
 
 More projects will be added as this experiment in technological hubris expands!
 
