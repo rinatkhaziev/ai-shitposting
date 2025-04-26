@@ -1,3 +1,7 @@
+## Human message
+
+It got so scary good that I decided I'll see you all in the App Store. Here's a couple of screenshots for the reference.
+
 # Fretbrrd
 
 A cross-platform guitar learning app built with SwiftUI that helps users memorize the fretboard through interactive lessons and tests.
