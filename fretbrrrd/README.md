@@ -1,6 +1,10 @@
 ## Human message
 
-It got so scary good that I decided I'll see you all in the App Store. Here's a couple of screenshots for the reference.
+It got so scary good that I decided I'll see you all in the App Store. Here's a couple of screenshots of early buggy builds for the reference.
+
+![Init build iOS](./Screenshot%202025-04-15%20at%209.38.06 PM.png "")
+![Natural/all notes switch on MacOS](./Screenshot%202025-04-18%20at%2010.39.06 AM.png "")
+
 
 # Fretbrrd
 
